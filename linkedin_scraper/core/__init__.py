@@ -18,9 +18,9 @@ from .exceptions import (
     NetworkError,
     ScrapingError
 )
-from .utils import (
-    retry_async,
-    detect_rate_limit,
+from .retry import retry_async
+from .rate_limit import detect_rate_limit
+from .page_actions import (
     wait_for_element_smart,
     extract_text_safe,
     scroll_to_bottom,
@@ -29,6 +29,7 @@ from .utils import (
     handle_modal_close,
     is_page_loaded
 )
+from .registry import ScraperRegistry, default_registry
 
 __all__ = [
     # Browser
@@ -58,4 +59,7 @@ __all__ = [
     'click_see_more_buttons',
     'handle_modal_close',
     'is_page_loaded',
+    # Registry
+    'ScraperRegistry',
+    'default_registry',
 ]

@@ -12,8 +12,13 @@ chromedriver
 scrape.py
 creds.json
 venv
+.venv/
 *.zip
 .env
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Test outputs
 *.log
@@ -34,14 +39,15 @@ debug_*.py
 
 # Session files (sensitive cookies)
 linkedin_session.json
+linkedin_session*.json
 
 # Build artifacts
 MANIFEST
 MANIFEST.ini
 .pytest_cache/
 
-# Local uv lockfile (library uses pyproject/requirements)
-uv.lock
+# Orphan pytest temp dirs
+pytest-cache-files-*/
 
 # Basic package build artifacts
 build-basic/

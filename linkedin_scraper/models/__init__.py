@@ -4,8 +4,10 @@ from .person import Person, Experience, Education, Contact, Accomplishment, Inte
 from .company import Company, CompanySummary, Employee
 from .job import Job
 from .post import Post
+from .base import BaseScraperModel
 
 __all__ = [
+    "BaseScraperModel",
     "Person",
     "Experience",
     "Education",

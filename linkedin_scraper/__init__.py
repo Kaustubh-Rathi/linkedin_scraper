@@ -1,7 +1,11 @@
 """LinkedIn Scraper - Async Playwright-based scraper for LinkedIn."""
 
-# Version
-__version__ = "3.1.2"
+try:
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("linkedin_scraper")
+except Exception:  # pragma: no cover - fallback for editable/source trees
+    __version__ = "3.1.2"
 
 # Core modules
 from .core import (
@@ -54,6 +58,10 @@ from .models import (
     Post,
 )
 
+# Protocols and registry
+from .protocols import ScraperService, SearchService
+from .core.registry import ScraperRegistry, default_registry
+
 __all__ = [
     # Version
     "__version__",
@@ -96,4 +104,9 @@ __all__ = [
     "Employee",
     "Job",
     "Post",
+    # Protocols and registry
+    "ScraperService",
+    "SearchService",
+    "ScraperRegistry",
+    "default_registry",
 ]

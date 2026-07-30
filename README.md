@@ -46,31 +46,36 @@ asyncio.run(main())
 ```bash
 pip install linkedin-scraper==2.11.2
 ```
-## Quick Testing
+## Quick start (CLI)
 
-To test that this works, you can clone this repo, install dependencies with
+```bash
+pip install -e ".[dev]"
+playwright install chromium
+
+# One-time: create an authenticated session (opens a browser)
+linkedin-scraper login
+
+# Scrape
+linkedin-scraper person https://www.linkedin.com/in/williamhgates/
+linkedin-scraper company https://www.linkedin.com/company/microsoft/
+linkedin-scraper jobs --keywords "software engineer" --location "Toronto" --limit 5
+linkedin-scraper posts https://www.linkedin.com/company/microsoft/ --limit 10
+
+# Optional: write JSON to a file
+linkedin-scraper person https://www.linkedin.com/in/williamhgates/ -o person.json
 ```
-git clone https://github.com/joeyism/linkedin_scraper.git
-cd linkedin_scraper
-pip3 install -e .
-```
-then run
-```
-python3 samples/create_session.py
-python3 samples/scrape_company.py
-python3 samples/scrape_person.py
-```
-and you will see the scraping in action.
+
+You can also run `python -m linkedin_scraper ...` with the same arguments.
 
 ---
 
 ## Features
 
 - **Person Profiles** - Scrape comprehensive profile information
-  - Basic info (name, headline, location, about)
+  - Basic info (name, location, about, open-to-work)
   - Work experience with details
   - Education history
-  - Skills and accomplishments
+  - Interests, accomplishments, and contacts
   
 - **Company Pages** - Extract company information
   - Company overview and details
@@ -106,7 +111,14 @@ playwright install chromium
 
 ## Quick Start
 
-### Basic Usage
+### CLI
+
+```bash
+linkedin-scraper login
+linkedin-scraper person https://linkedin.com/in/username -o out.json
+```
+
+### Python library
 
 ```python
 import asyncio
@@ -116,7 +128,7 @@ async def main():
     # Initialize browser
     async with BrowserManager(headless=False) as browser:
         # Load authenticated session
-        await browser.load_session("session.json")
+        await browser.load_session("linkedin_session.json")
         
         # Create scraper
         scraper = PersonScraper(browser.page)
@@ -126,8 +138,8 @@ async def main():
         
         # Access data
         print(f"Name: {person.name}")
-        print(f"Headline: {person.headline}")
         print(f"Location: {person.location}")
+        print(f"About: {(person.about or '')[:200]}")
         print(f"Experiences: {len(person.experiences)}")
         print(f"Education: {len(person.educations)}")
 
@@ -207,30 +219,33 @@ asyncio.run(scrape_company_posts())
 
 ## Authentication
 
-LinkedIn requires authentication. You need to create a session file first:
+LinkedIn requires authentication. Create a session once:
 
-### Option 1: Manual Login Script
+### Option 1: CLI (recommended)
+
+```bash
+linkedin-scraper login
+# saves linkedin_session.json in the current directory
+```
+
+### Option 2: Manual login in Python
 
 ```python
+import asyncio
 from linkedin_scraper import BrowserManager, wait_for_manual_login
 
 async def create_session():
     async with BrowserManager(headless=False) as browser:
-        # Navigate to LinkedIn
         await browser.page.goto("https://www.linkedin.com/login")
-        
-        # Wait for manual login (opens browser)
         print("Please log in to LinkedIn...")
-        await wait_for_manual_login(browser.page, timeout=300)
-        
-        # Save session
-        await browser.save_session("session.json")
-        print("✓ Session saved!")
+        await wait_for_manual_login(browser.page, timeout=300000)
+        await browser.save_session("linkedin_session.json")
+        print("Session saved!")
 
 asyncio.run(create_session())
 ```
 
-### Option 2: Programmatic Login
+### Option 3: Programmatic Login
 
 ```python
 from linkedin_scraper import BrowserManager, login_with_credentials
@@ -297,42 +312,49 @@ All scraped data is returned as Pydantic models:
 
 ```python
 class Person(BaseModel):
-    name: str
-    headline: Optional[str]
+    linkedin_url: str
+    name: Optional[str]
     location: Optional[str]
     about: Optional[str]
-    linkedin_url: str
+    open_to_work: bool
     experiences: List[Experience]
     educations: List[Education]
-    skills: List[str]
-    accomplishments: Optional[Accomplishment]
+    interests: List[Interest]
+    accomplishments: List[Accomplishment]
+    contacts: List[Contact]
 ```
 
 ### Company
 
 ```python
 class Company(BaseModel):
-    name: str
-    industry: Optional[str]
-    company_size: Optional[str]
+    linkedin_url: str
+    name: Optional[str]
+    about_us: Optional[str]
+    website: Optional[str]
     headquarters: Optional[str]
     founded: Optional[str]
-    specialties: List[str]
-    about: Optional[str]
-    linkedin_url: str
+    industry: Optional[str]
+    company_type: Optional[str]
+    company_size: Optional[str]
+    specialties: Optional[str]
+    # Reserved (not yet populated by CompanyScraper):
+    # headcount, showcase_pages, affiliated_companies, employees
 ```
 
 ### Job
 
 ```python
 class Job(BaseModel):
-    title: str
-    company: str
-    location: Optional[str]
-    description: Optional[str]
-    employment_type: Optional[str]
-    seniority_level: Optional[str]
     linkedin_url: str
+    job_title: Optional[str]
+    company: Optional[str]
+    company_linkedin_url: Optional[str]
+    location: Optional[str]
+    posted_date: Optional[str]
+    applicant_count: Optional[str]
+    job_description: Optional[str]
+    benefits: Optional[str]
 ```
 
 ### Post
@@ -368,7 +390,7 @@ browser = BrowserManager(
 from linkedin_scraper import (
     AuthenticationError,
     RateLimitError,
-    ProfileNotFoundError
+    ScrapingError,
 )
 
 try:
@@ -377,8 +399,8 @@ except AuthenticationError:
     print("Not logged in - session expired")
 except RateLimitError:
     print("Rate limited by LinkedIn")
-except ProfileNotFoundError:
-    print("Profile not found or private")
+except ScrapingError as e:
+    print(f"Scraping failed: {e}")
 ```
 
 ## Best Practices
@@ -402,7 +424,6 @@ except ProfileNotFoundError:
 - Python 3.8+
 - Playwright
 - Pydantic 2.0+
-- aiofiles
 - python-dotenv (optional, for credentials)
 
 ## License

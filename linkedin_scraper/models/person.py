@@ -1,22 +1,24 @@
 """Pydantic models for LinkedIn Person/Profile data."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import Field, field_validator
+
+from .base import BaseScraperModel
 
 
-class Interest(BaseModel):
+class Interest(BaseScraperModel):
     name: str
     category: str
     linkedin_url: Optional[str] = None
 
 
-class Contact(BaseModel):
+class Contact(BaseScraperModel):
     type: str
     value: str
     label: Optional[str] = None
 
 
-class Experience(BaseModel):
+class Experience(BaseScraperModel):
     """Work experience model."""
 
     position_title: Optional[str] = None
@@ -29,7 +31,7 @@ class Experience(BaseModel):
     description: Optional[str] = None
 
 
-class Education(BaseModel):
+class Education(BaseScraperModel):
     """Education model."""
 
     institution_name: Optional[str] = None
@@ -40,7 +42,7 @@ class Education(BaseModel):
     description: Optional[str] = None
 
 
-class Accomplishment(BaseModel):
+class Accomplishment(BaseScraperModel):
     category: str
     title: str
     issuer: Optional[str] = None
@@ -50,7 +52,7 @@ class Accomplishment(BaseModel):
     description: Optional[str] = None
 
 
-class Person(BaseModel):
+class Person(BaseScraperModel):
     """
     LinkedIn Person/Profile model with validation.
 
@@ -75,27 +77,6 @@ class Person(BaseModel):
         if "linkedin.com/in/" not in v:
             raise ValueError("Must be a valid LinkedIn profile URL (contains /in/)")
         return v
-
-    def to_dict(self) -> dict:
-        """
-        Convert to dictionary.
-
-        Returns:
-            Dictionary representation of the person
-        """
-        return self.model_dump()
-
-    def to_json(self, **kwargs) -> str:
-        """
-        Convert to JSON string.
-
-        Args:
-            **kwargs: Additional arguments for model_dump_json (e.g., indent=2)
-
-        Returns:
-            JSON string representation
-        """
-        return self.model_dump_json(**kwargs)
 
     @property
     def company(self) -> Optional[str]:

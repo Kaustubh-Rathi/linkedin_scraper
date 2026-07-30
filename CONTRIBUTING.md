@@ -26,8 +26,7 @@ Thank you for your interest in contributing to LinkedIn Scraper! This document p
 
 3. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
 
 4. **Install Playwright browsers**
@@ -46,17 +45,14 @@ Thank you for your interest in contributing to LinkedIn Scraper! This document p
 ### Running Tests
 
 ```bash
-# Run all tests
-pytest
+# Unit tests (default for local/CI)
+pytest -m unit
 
-# Run specific test file
-pytest tests/test_person.py
+# Integration tests (needs linkedin-scraper login session)
+pytest -m integration
 
-# Run with verbose output
-pytest -v
-
-# Run with coverage
-pytest --cov=linkedin_scraper
+# Coverage
+pytest -m unit --cov=linkedin_scraper
 ```
 
 ### Code Style
@@ -82,8 +78,8 @@ mypy linkedin_scraper/
 ### Testing Your Changes
 
 1. Write tests for new functionality
-2. Ensure all existing tests pass
-3. Test manually with the sample scripts in `samples/`
+2. Ensure all existing unit tests pass (`pytest -m unit`)
+3. Smoke-test with the CLI (`linkedin-scraper login` / `person` / …)
 4. Verify documentation is updated
 
 ## Making Changes

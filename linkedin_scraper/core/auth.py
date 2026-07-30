@@ -9,7 +9,7 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 from dotenv import load_dotenv
 
 from .exceptions import AuthenticationError
-from .utils import detect_rate_limit
+from .rate_limit import detect_rate_limit
 
 logger = logging.getLogger(__name__)
 
