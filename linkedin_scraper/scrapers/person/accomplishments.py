@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import List, Optional
 
+from ...core.exceptions import AuthenticationError, RateLimitError
 from ...models import Accomplishment
-from .links import profile_detail_url
+from ...parsers.person import parse_accomplishment_item
+from ...ports.browser import ElementPort
 from ._extractor import SectionExtractor
+from .links import profile_detail_url
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +18,8 @@ logger = logging.getLogger(__name__)
 class AccomplishmentsExtractor(SectionExtractor):
     """Extracts certification/honor/publication/etc. sections of a profile."""
 
-    async def get_accomplishments(self, base_url: str) -> List[Accomplishment]:
-        accomplishments: List[Accomplishment] = []
+    async def get_accomplishments(self, base_url: str) -> list[Accomplishment]:
+        accomplishments: list[Accomplishment] = []
 
         accomplishment_sections = [
             ("certifications", "certification"),
@@ -32,25 +35,26 @@ class AccomplishmentsExtractor(SectionExtractor):
         for url_path, category in accomplishment_sections:
             try:
                 section_url = profile_detail_url(base_url, f"details/{url_path}/")
-                await self.navigate_and_wait(section_url)
-                await self.page.wait_for_selector("main", timeout=10000)
-                await self.wait_and_focus(1)
+                await self.browser.goto(section_url, wait_until="domcontentloaded")
+                try:
+                    await self.browser.wait_for_selector("main", timeout=10000)
+                except Exception as exc:
+                    logger.debug("Selector wait for 'main' timed out in accomplishments/%s: %s", url_path, exc)
+                await asyncio.sleep(1)
 
-                nothing_to_see = await self.page.locator(
-                    'text="Nothing to see for now"'
-                ).count()
-                if nothing_to_see > 0:
+                nothing_elements = await self.browser.query_selector_all('text="Nothing to see for now"')
+                if nothing_elements:
                     continue
 
-                main_list = self.page.locator(
-                    ".pvs-list__container, main ul, main ol"
-                ).first
-                if await main_list.count() == 0:
-                    continue
+                main_elements = await self.browser.query_selector_all("main")
+                if main_elements:
+                    main_txt = (await main_elements[0].text_content()) or ""
+                    if "Nothing to see for now" in main_txt:
+                        continue
 
-                items = await main_list.locator(".pvs-list__paged-list-item").all()
-                if not items:
-                    items = await main_list.locator("> li").all()
+                items = await self.browser.query_selector_all(
+                    ".pvs-list__container .pvs-list__paged-list-item, main ul .pvs-list__paged-list-item, main ol .pvs-list__paged-list-item, .pvs-list__container > li, main ul > li, main ol > li"
+                )
 
                 seen_titles = set()
                 for item in items:
@@ -62,97 +66,32 @@ class AccomplishmentsExtractor(SectionExtractor):
                             seen_titles.add(accomplishment.title)
                             accomplishments.append(accomplishment)
                     except Exception as e:
-                        logger.debug(f"Error parsing {category} item: {e}")
+                        logger.debug("Error parsing %s item: %s", category, e)
                         continue
 
+            except (AuthenticationError, RateLimitError):
+                raise
             except Exception as e:
-                logger.debug(f"Error getting {category}s: {e}")
+                logger.debug("Non-fatal error getting %ss: %s", category, e)
                 continue
 
         return accomplishments
 
     async def _parse_accomplishment_item(
-        self, item, category: str
-    ) -> Optional[Accomplishment]:
-        try:
-            entity = item.locator(
-                'div[data-view-name="profile-component-entity"]'
-            ).first
-            if await entity.count() > 0:
-                spans = await entity.locator('span[aria-hidden="true"]').all()
-            else:
-                spans = await item.locator('span[aria-hidden="true"]').all()
+        self, item: ElementPort, category: str
+    ) -> Accomplishment | None:
+        """Extract raw text and URL attributes from item DOM and delegate to pure parser."""
+        entities = await item.query_selector_all('div[data-view-name="profile-component-entity"]')
+        if entities:
+            span_elements = await entities[0].query_selector_all('span[aria-hidden="true"]')
+        else:
+            span_elements = await item.query_selector_all('span[aria-hidden="true"]')
 
-            title = ""
-            issuer = ""
-            issued_date = ""
-            credential_id = ""
+        spans = [((await s.text_content()) or "") for s in span_elements]
 
-            for i, span in enumerate(spans[:5]):
-                text = await span.text_content()
-                if not text:
-                    continue
-                text = text.strip()
+        links = await item.query_selector_all('a[href*="credential"], a[href*="verify"]')
+        credential_url = (
+            (await links[0].get_attribute("href")) if links else None
+        )
 
-                if len(text) > 500:
-                    continue
-
-                if i == 0:
-                    title = text
-                elif "Issued by" in text:
-                    parts = text.split("·")
-                    issuer = parts[0].replace("Issued by", "").strip()
-                    if len(parts) > 1:
-                        issued_date = parts[1].strip()
-                elif "Issued " in text and not issued_date:
-                    issued_date = text.replace("Issued ", "")
-                elif "Credential ID" in text:
-                    credential_id = text.replace("Credential ID ", "")
-                elif i == 1 and not issuer:
-                    issuer = text
-                elif (
-                    any(
-                        month in text
-                        for month in [
-                            "Jan",
-                            "Feb",
-                            "Mar",
-                            "Apr",
-                            "May",
-                            "Jun",
-                            "Jul",
-                            "Aug",
-                            "Sep",
-                            "Oct",
-                            "Nov",
-                            "Dec",
-                        ]
-                    )
-                    and not issued_date
-                ):
-                    if "·" in text:
-                        parts = text.split("·")
-                        issued_date = parts[0].strip()
-                    else:
-                        issued_date = text
-
-            link = item.locator('a[href*="credential"], a[href*="verify"]').first
-            credential_url = (
-                await link.get_attribute("href") if await link.count() > 0 else None
-            )
-
-            if not title or len(title) > 200:
-                return None
-
-            return Accomplishment(
-                category=category,
-                title=title,
-                issuer=issuer if issuer else None,
-                issued_date=issued_date if issued_date else None,
-                credential_id=credential_id if credential_id else None,
-                credential_url=credential_url,
-            )
-
-        except Exception as e:
-            logger.debug(f"Error parsing accomplishment: {e}")
-            return None
+        return parse_accomplishment_item(spans, credential_url, category)

@@ -2,7 +2,7 @@
 import pytest
 
 from linkedin_scraper.models.post import Post
-from linkedin_scraper.scrapers.company.posts_parser import (
+from linkedin_scraper.parsers.posts import (
     build_posts_url,
     extract_time_from_text,
     parse_count,

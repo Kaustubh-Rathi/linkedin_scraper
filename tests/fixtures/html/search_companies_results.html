@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Company Search Results | LinkedIn</title>
+</head>
+<body>
+  <div class="search-results-container">
+    <ul class="reusable-search__entity-result-list">
+      <!-- Card 1: Standard company card with full details -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/company/microsoft/?trk=search_result">
+                <span dir="ltr"><span aria-hidden="true">Microsoft</span></span>
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">Software Development • Redmond, Washington</div>
+            <div class="entity-result__secondary-subtitle">21,450,000 followers</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 2: Formatted follower count variants (1.5M, 500k, 10,000+) -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/company/openai/">
+                OpenAI
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">Artificial Intelligence • San Francisco, CA</div>
+            <div class="entity-result__secondary-subtitle">4.2M followers</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 3: Whitespace, newlines, verified badges -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/company/google/">
+                
+                Google
+                <span class="visually-hidden">Verified Page</span>
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">
+              Technology, Information and Internet • Mountain View, CA
+            </div>
+            <div class="entity-result__secondary-subtitle">
+              31,200,000 followers
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 4: Missing optional fields (no followers, no industry/location) -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/company/stealth-startup-xyz/">
+                Stealth Startup XYZ
+              </a>
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 5: Alternative attribute order and query tracking params -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <a id="company-card-5" target="_self" class="app-aware-link" href="https://www.linkedin.com/company/anthropic-ai?trk=public_jobs_topcard-org-name&originalSubdomain=ca#about">
+              Anthropic
+            </a>
+            <div class="entity-result__primary-subtitle">AI Research and Development</div>
+            <div class="entity-result__secondary-subtitle">750K followers</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 6: Malformed / Fragment only links -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <a href="#">Company Directory</a>
+          <a href="?trk=search">Next</a>
+          <a href="https://www.linkedin.com/company/valid-co/">Valid Co</a>
+        </div>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>

@@ -5,6 +5,7 @@ import pytest
 
 from linkedin_scraper.cli import commands
 from linkedin_scraper.models import Person
+from linkedin_scraper.search import PersonSearchResult, SearchWorkflowResult
 
 
 class _CM:
@@ -72,3 +73,65 @@ def test_dump_result_list_of_dicts(capsys):
     commands._dump_result([{"a": 1}], output=None)
     captured = capsys.readouterr()
     assert '"a": 1' in captured.out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cmd_search_executes_and_exports_csv(tmp_path):
+    browser = MagicMock()
+    browser.page = object()
+    browser.load_session = AsyncMock()
+    browser.browser_port = MagicMock()
+
+    workflow_res = SearchWorkflowResult[PersonSearchResult](
+        items=[
+            PersonSearchResult(
+                name="Ada Lovelace",
+                linkedin_url="https://www.linkedin.com/in/ada/",
+                headline="Computer Pioneer",
+            )
+        ],
+        total_collected=1,
+        pages_fetched=1,
+    )
+
+    out_file = tmp_path / "search_results.csv"
+
+    mock_facade = MagicMock()
+    mock_facade.execute_workflow = AsyncMock(return_value=workflow_res)
+
+    with patch.object(commands, "session_browser", return_value=_CM(browser)):
+        with patch("linkedin_scraper.search.LinkedInSearchFacade.from_browser", return_value=mock_facade):
+            code = await commands.cmd_search(
+                entity_type="people",
+                keywords="pioneer",
+                location="London",
+                limit=10,
+                page_size=5,
+                export_format="csv",
+                session="s.json",
+                output=str(out_file),
+            )
+
+    assert code == 0
+    mock_facade.execute_workflow.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cmd_search_requires_company_for_employee():
+    code = await commands.cmd_search(
+        entity_type="employees",
+        keywords="lead",
+        company=None,
+    )
+    assert code == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cmd_search_unknown_entity_type():
+    code = await commands.cmd_search(
+        entity_type="unknown_type",
+    )
+    assert code == 1

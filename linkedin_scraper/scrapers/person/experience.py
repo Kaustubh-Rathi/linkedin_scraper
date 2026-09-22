@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, FrozenSet, List, Optional, Tuple
 
+from ...core.exceptions import AuthenticationError, RateLimitError
+from ...core.page_actions import scroll_to_bottom
 from ...models import Experience
-from .links import attach_organization_urls, profile_detail_url
-from .parser import (
+from ...parsers.person import (
     _looks_like_job_title,
-    item_text_and_url,
     parse_experience_lines,
     parse_experiences_text,
 )
+from ..base import PROFILE_COMPONENT_ITEMS
 from ._extractor import SectionExtractor
+from .links import attach_organization_urls, extract_item_text_and_url, profile_detail_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,49 +22,54 @@ logger = logging.getLogger(__name__)
 class ExperienceExtractor(SectionExtractor):
     """Extracts and normalizes the Experience section of a profile."""
 
-    async def get_experiences(self, base_url: str) -> List[Experience]:
+    async def get_experiences(self, base_url: str) -> list[Experience]:
         """Extract experiences from the details/experience page (complete list)."""
         try:
             return await self._fetch_experiences_from_details(base_url)
+        except (AuthenticationError, RateLimitError):
+            raise
         except Exception as e:
             logger.warning(
-                f"Error getting experiences: {e}. The experience section may not be available or the page structure has changed."
+                "Error getting experiences: %s. The experience section may not be available or the page structure has changed.",
+                e,
             )
             return []
 
-    async def _fetch_experiences_from_details(self, base_url: str) -> List[Experience]:
+    async def _fetch_experiences_from_details(self, base_url: str) -> list[Experience]:
         """Scrape complete experience cards, with text as a fallback."""
         exp_url = profile_detail_url(base_url, "details/experience/")
-        await self.navigate_and_wait(exp_url)
-        await self.wait_for_detail_section("Experience")
-        await self.scroll_page_to_bottom(pause_time=0.3, max_scrolls=4)
+        await self.browser.goto(exp_url, wait_until="domcontentloaded")
+        await self._wait_for_detail_section("Experience")
+        await scroll_to_bottom(self.browser, pause_time=0.3, max_scrolls=4)
 
         experiences = await self._parse_experience_cards()
         if experiences:
             return self._dedupe_experiences(experiences)
 
-        page_text = await self.page.locator("main").first.inner_text()
-        experiences = parse_experiences_text(page_text)
-        if experiences:
-            experiences = await attach_organization_urls(
-                self.page, experiences, "/company/"
-            )
-            return self._dedupe_experiences(experiences)
+        main_elements = await self.browser.query_selector_all("main")
+        if main_elements:
+            page_text = await main_elements[0].inner_text()
+            experiences = parse_experiences_text(page_text)
+            if experiences:
+                experiences = await attach_organization_urls(
+                    self.browser, experiences, "/company/"
+                )
+                return self._dedupe_experiences(experiences)
 
-        await self.navigate_and_wait(base_url)
+        await self.browser.goto(base_url, wait_until="domcontentloaded")
         experiences = await self._parse_experience_cards()
         return self._dedupe_experiences(experiences)
 
-    async def _parse_experience_cards(self) -> List[Experience]:
+    async def _parse_experience_cards(self) -> list[Experience]:
         """Parse visible DOM cards, including grouped company roles."""
         experiences = []
         last_org_url = None
-        items = await self.locate_profile_component_items()
+        items = await self.browser.query_selector_all(PROFILE_COMPONENT_ITEMS)
         for item in items:
             try:
-                lines, company_url = await item_text_and_url(item, "/company/")
+                lines, company_url = await extract_item_text_and_url(item, "/company/")
                 if company_url is None:
-                    _, company_url = await item_text_and_url(item, "/school/")
+                    _, company_url = await extract_item_text_and_url(item, "/school/")
                 if company_url:
                     last_org_url = company_url
                 else:
@@ -75,10 +81,10 @@ class ExperienceExtractor(SectionExtractor):
         return experiences
 
     @staticmethod
-    def _dedupe_experiences(experiences: List[Experience]) -> List[Experience]:
+    def _dedupe_experiences(experiences: list[Experience]) -> list[Experience]:
         """Remove duplicate cards emitted by overlapping LinkedIn selectors."""
-        by_identity: Dict[
-            Tuple[Optional[str], Optional[str], Optional[str], FrozenSet[str]],
+        by_identity: dict[
+            tuple[str | None, str | None, str | None, frozenset[str]],
             Experience,
         ] = {}
         for experience in experiences:

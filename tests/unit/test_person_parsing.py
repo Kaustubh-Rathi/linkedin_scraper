@@ -2,7 +2,7 @@
 LinkedIn person-section parsers)."""
 import pytest
 
-from linkedin_scraper.scrapers.person.parser import (
+from linkedin_scraper.parsers.person import (
     clean_lines,
     is_education_metadata,
     is_valid_institution,

@@ -2,7 +2,6 @@
 Pytest configuration and fixtures for linkedin_scraper tests.
 """
 import pytest
-import asyncio
 from pathlib import Path
 from linkedin_scraper import BrowserManager
 from linkedin_scraper.callbacks import SilentCallback
@@ -10,14 +9,6 @@ from linkedin_scraper.callbacks import SilentCallback
 
 # Session file path
 SESSION_FILE = Path(__file__).parent.parent / "linkedin_session.json"
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture
@@ -47,7 +38,7 @@ async def browser_with_session():
     """
     if not SESSION_FILE.exists():
         pytest.skip("Session file not found. See README for session setup instructions.")
-    
+
     async with BrowserManager(headless=False) as browser_manager:
         await browser_manager.load_session(str(SESSION_FILE))
         yield browser_manager
@@ -100,4 +91,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "unit: mark test as unit test"
+    )
+    config.addinivalue_line(
+        "markers", "live: mark test as live E2E test requiring real LinkedIn network and authentication"
+    )
+    config.addinivalue_line(
+        "markers", "e2e: mark test as end-to-end test requiring full setup"
     )

@@ -1,6 +1,7 @@
 """Pydantic models for LinkedIn Job data."""
 
 from typing import Optional
+
 from pydantic import field_validator
 
 from .base import BaseScraperModel
@@ -21,7 +22,7 @@ class Job(BaseScraperModel):
     applicant_count: Optional[str] = None
     job_description: Optional[str] = None
     benefits: Optional[str] = None
-    
+
     @field_validator('linkedin_url')
     @classmethod
     def validate_linkedin_url(cls, v: str) -> str:

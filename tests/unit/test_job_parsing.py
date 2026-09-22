@@ -1,7 +1,7 @@
 """Tests for linkedin_scraper.scrapers.job_parsing."""
 import pytest
 
-from linkedin_scraper.scrapers.job.parser import (
+from linkedin_scraper.parsers.job import (
     clean_job_url,
     looks_like_applicant_count,
     looks_like_location,

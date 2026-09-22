@@ -24,15 +24,3 @@ async def test_accomplishments_skips_nothing_to_see(fake_page_cls, fake_locator_
     extractor = AccomplishmentsExtractor(host)
     result = await extractor.get_accomplishments("https://www.linkedin.com/in/example/")
     assert result == []
-
-
-@pytest.mark.unit
-def test_registry_has_and_is_registered():
-    from linkedin_scraper.core.registry import ScraperRegistry
-
-    reg = ScraperRegistry()
-    assert reg.is_registered("person") is False
-    assert reg.has("x") is False
-    reg.register("x", lambda: None)
-    assert reg.is_registered("x") is True
-    assert reg.has("x") is True

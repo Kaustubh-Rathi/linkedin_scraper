@@ -7,7 +7,7 @@ from linkedin_scraper.scrapers.person.links import (
     profile_detail_url,
     unwrap_href,
 )
-from linkedin_scraper.scrapers.person.parser import (
+from linkedin_scraper.parsers.person import (
     parse_education_lines,
     parse_educations_text,
     parse_experience_lines,
@@ -183,7 +183,6 @@ def test_parse_experience_without_company_url():
 
 @pytest.mark.unit
 def test_parse_education_without_school_url():
-    from linkedin_scraper.scrapers.person.parser import parse_education_lines
 
     education = parse_education_lines(
         [

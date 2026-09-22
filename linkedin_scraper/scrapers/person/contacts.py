@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 from urllib.parse import urlparse
 
+from ...core.exceptions import AuthenticationError, RateLimitError
 from ...models import Contact
-from .links import (
+from ...parsers.person import parse_contact_dialog_heading_and_links
+from ...parsers.person_links import (
     classify_link,
     contact_type_from_heading,
     merge_contacts,
     profile_detail_url,
     unwrap_href,
 )
+from ...ports.browser import ElementPort
 from ._extractor import SectionExtractor
 
 logger = logging.getLogger(__name__)
@@ -22,15 +24,15 @@ logger = logging.getLogger(__name__)
 class ContactsExtractor(SectionExtractor):
     """Extracts the contact-info dialog and outbound profile links."""
 
-    async def extract_outbound_links(self) -> List[Contact]:
+    async def extract_outbound_links(self) -> list[Contact]:
         """Collect Featured/custom outbound links from the current profile page."""
-        contacts: List[Contact] = []
+        contacts: list[Contact] = []
         try:
-            links = await self.page.locator("main a[href]").all()
+            links = await self.browser.query_selector_all("main a[href]")
             seen = set()
             for link in links:
                 try:
-                    href = (await link.get_attribute("href") or "").strip()
+                    href = ((await link.get_attribute("href")) or "").strip()
                     if not href:
                         continue
                     href = unwrap_href(href)
@@ -60,90 +62,85 @@ class ContactsExtractor(SectionExtractor):
                         continue
                     if "linkedin.com" in urlparse(href).netloc.lower():
                         continue
-                    label = (await link.text_content() or "").strip() or None
+                    label = ((await link.text_content()) or "").strip() or None
                     if label and len(label) > 80:
                         label = label[:80]
                     contact = classify_link(href, label)
                     seen.add(href)
                     contacts.append(contact)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Error parsing single outbound link: %s", exc)
                     continue
         except Exception as e:
             logger.debug("Error extracting outbound links: %s", e)
         return contacts
 
-    async def get_contacts(self, base_url: str) -> List[Contact]:
+    async def get_contacts(self, base_url: str) -> list[Contact]:
         """Extract linked and plain-text fields from the contact-info dialog."""
-        contacts = []
+        contacts: list[Contact] = []
         try:
             contact_url = profile_detail_url(base_url, "overlay/contact-info/")
-            await self.navigate_and_wait(contact_url)
+            await self.browser.goto(contact_url, wait_until="domcontentloaded")
             try:
-                await self.page.wait_for_selector("main, [role='dialog']", timeout=5000)
-            except Exception:
-                pass
+                await self.browser.wait_for_selector("main, [role='dialog']", timeout=5000)
+            except Exception as exc:
+                logger.debug("Contact info dialog wait timed out: %s", exc)
 
-            dialog = self.page.locator('dialog, [role="dialog"]').first
-            if await dialog.count() > 0:
-                for heading in await dialog.locator("h3").all():
-                    heading_text = (await heading.text_content() or "").strip()
+            dialogs = await self.browser.query_selector_all('dialog, [role="dialog"]')
+            if dialogs:
+                dialog = dialogs[0]
+                sections = await dialog.query_selector_all("section")
+                if not sections:
+                    sections = [dialog]
+                for section in sections:
+                    headings = await section.query_selector_all("h3")
+                    if not headings:
+                        continue
+                    heading_text = ((await headings[0].text_content()) or "").strip()
                     contact_type = contact_type_from_heading(heading_text)
                     if not contact_type:
                         continue
-                    container = heading.locator("xpath=..")
-                    links = await container.locator("a[href]").all()
+                    links = await section.query_selector_all("a[href]")
                     if links:
+                        link_items = []
                         for link in links:
-                            raw_href = (await link.get_attribute("href") or "").strip()
-                            text = (await link.text_content() or "").strip()
+                            raw_href = ((await link.get_attribute("href")) or "").strip()
+                            text = ((await link.text_content()) or "").strip()
                             if not raw_href:
                                 continue
-                            href = unwrap_href(raw_href)
-                            label = await self._contact_label(container)
-                            if href.startswith("mailto:"):
-                                value = href[7:]
-                            elif href.startswith("tel:"):
-                                value = href[4:]
-                            elif contact_type in {"linkedin", "website", "twitter"}:
-                                value = href
-                            else:
-                                value = text or href
-                            if contact_type == "website":
-                                contacts.append(classify_link(value, label))
-                            else:
-                                contacts.append(
-                                    Contact(
-                                        type=contact_type,
-                                        value=value,
-                                        label=label,
-                                    )
-                                )
-                    else:
-                        plain_value = self.plain_contact_value(
-                            await container.inner_text(), heading_text
+                            label = await self._contact_label(section)
+                            link_items.append((raw_href, text, label))
+                        parsed = parse_contact_dialog_heading_and_links(
+                            heading_text, link_items, None
                         )
-                        if plain_value:
-                            contacts.append(
-                                Contact(type=contact_type, value=plain_value)
-                            )
+                        contacts.extend(parsed)
+                    else:
+                        plain_text = await section.inner_text()
+                        parsed = parse_contact_dialog_heading_and_links(
+                            heading_text, [], plain_text
+                        )
+                        contacts.extend(parsed)
 
             outbound = await self.extract_outbound_links()
             return merge_contacts(contacts, outbound)
+        except (AuthenticationError, RateLimitError):
+            raise
         except Exception as e:
-            logger.warning(f"Error getting contacts: {e}")
+            logger.warning("Error getting contacts: %s", e)
             return contacts
 
     @staticmethod
-    async def _contact_label(container) -> Optional[str]:
+    async def _contact_label(container: ElementPort) -> str | None:
         """Return labels such as Mobile, Personal, or Work."""
-        for element in await container.locator("span, generic").all():
-            text = (await element.text_content() or "").strip()
+        elements = await container.query_selector_all("span, generic")
+        for element in elements:
+            text = ((await element.text_content()) or "").strip()
             if text.startswith("(") and text.endswith(")"):
                 return text[1:-1].strip() or None
         return None
 
     @staticmethod
-    def plain_contact_value(text: str, heading: str) -> Optional[str]:
+    def plain_contact_value(text: str, heading: str) -> str | None:
         """Remove a contact heading while retaining a non-linked value."""
         lines = [
             line.strip()

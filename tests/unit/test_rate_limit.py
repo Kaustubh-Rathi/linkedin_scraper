@@ -51,7 +51,11 @@ async def test_detect_rate_limit_raises_on_too_many_requests_text(fake_page_cls,
     def locator_factory(selector: str):
         if "captcha" in selector:
             return fake_locator_cls(count=0)
-        return fake_locator_cls(text="Whoa there! Too many requests, please slow down.")
+        if "rate-limit" in selector or "rateLimit" in selector:
+            return fake_locator_cls(
+                count=1, text="Whoa there! Too many requests, please slow down."
+            )
+        return fake_locator_cls(count=0)
 
     page = fake_page_cls(
         url="https://www.linkedin.com/in/example/",
@@ -74,7 +78,9 @@ async def test_detect_rate_limit_matches_all_known_phrases(phrase, fake_page_cls
     def locator_factory(selector: str):
         if "captcha" in selector:
             return fake_locator_cls(count=0)
-        return fake_locator_cls(text=f"Some banner text: {phrase}")
+        if "rate-limit" in selector or "rateLimit" in selector:
+            return fake_locator_cls(count=1, text=f"Some banner text: {phrase}")
+        return fake_locator_cls(count=0)
 
     page = fake_page_cls(
         url="https://www.linkedin.com/in/example/",
@@ -83,6 +89,38 @@ async def test_detect_rate_limit_matches_all_known_phrases(phrase, fake_page_cls
 
     with pytest.raises(RateLimitError):
         await detect_rate_limit(page)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_detect_rate_limit_ignores_phrase_in_unrelated_page_text(fake_page_cls, fake_locator_cls):
+    """Rate-limit phrases outside the dedicated containers must not raise.
+
+    LinkedIn embeds rate-limit-like text in normal pages; only matches inside
+    the known rate-limit containers count as an actual rate limit. This guards
+    against the false positives that motivated container-scoped detection.
+    """
+
+    def locator_factory(selector: str):
+        if "captcha" in selector:
+            return fake_locator_cls(count=0)
+        if (
+            "rate-limit" in selector
+            or "rateLimit" in selector
+            or "artdeco" in selector
+            or "has-text" in selector
+        ):
+            # Dedicated containers and the fallback probe match nothing.
+            return fake_locator_cls(count=0)
+        # Unrelated parts of the page still carry the phrase.
+        return fake_locator_cls(count=1, text="Please try again later. Rate limit exceeded.")
+
+    page = fake_page_cls(
+        url="https://www.linkedin.com/in/example/",
+        locator_factory=locator_factory,
+    )
+
+    await detect_rate_limit(page)  # Should not raise
 
 
 @pytest.mark.unit

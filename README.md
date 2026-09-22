@@ -169,24 +169,37 @@ asyncio.run(scrape_company())
 ### Job Scraping
 
 ```python
-from linkedin_scraper import JobSearchScraper
+from linkedin_scraper import BrowserManager, JobScraper, JobSearchScraper
 
 async def search_jobs():
     async with BrowserManager(headless=False) as browser:
         await browser.load_session("session.json")
         
-        scraper = JobSearchScraper(browser.page)
-        jobs = await scraper.search(
+        search_scraper = JobSearchScraper(browser.page)
+        job_urls = await search_scraper.search(
             keywords="Python Developer",
             location="San Francisco",
             limit=10
         )
         
-        for job in jobs:
-            print(f"{job.title} at {job.company}")
+        job_scraper = JobScraper(browser.page)
+        for url in job_urls:
+            job = await job_scraper.scrape(url)
+            print(f"{job.job_title} at {job.company}")
             print(f"Location: {job.location}")
             print(f"Link: {job.linkedin_url}")
             print("---")
+
+async def search_jobs_facade():
+    from linkedin_scraper import LinkedInSearchFacade
+    from linkedin_scraper.search.queries import JobSearchQuery
+
+    async with BrowserManager(headless=False) as browser:
+        await browser.load_session("session.json")
+        facade = LinkedInSearchFacade(browser.browser_port)
+        page = await facade.search_jobs(JobSearchQuery(keywords="Python", limit=5))
+        for item in page.items:
+            print(f"{item.job_title} at {item.company} - {item.linkedin_url}")
 
 asyncio.run(search_jobs())
 ```
@@ -256,7 +269,7 @@ async def login():
         # Login with credentials
         await login_with_credentials(
             browser.page,
-            username=os.getenv("LINKEDIN_EMAIL"),
+            email=os.getenv("LINKEDIN_EMAIL"),
             password=os.getenv("LINKEDIN_PASSWORD")
         )
         

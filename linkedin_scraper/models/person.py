@@ -1,6 +1,7 @@
 """Pydantic models for LinkedIn Person/Profile data."""
 
 from typing import List, Optional
+
 from pydantic import Field, field_validator
 
 from .base import BaseScraperModel

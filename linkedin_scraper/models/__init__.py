@@ -1,10 +1,10 @@
 """Pydantic data models for LinkedIn scraper."""
 
-from .person import Person, Experience, Education, Contact, Accomplishment, Interest
+from .base import BaseScraperModel
 from .company import Company, CompanySummary, Employee
 from .job import Job
+from .person import Accomplishment, Contact, Education, Experience, Interest, Person
 from .post import Post
-from .base import BaseScraperModel
 
 __all__ = [
     "BaseScraperModel",

@@ -3,14 +3,18 @@ Job search scraper for LinkedIn.
 
 Searches for jobs on LinkedIn and extracts job URLs.
 """
-import logging
-from typing import Optional, List
-from urllib.parse import urlencode
-from playwright.async_api import Page
+from __future__ import annotations
 
+import logging
+from typing import Any
+
+from ...adapters.search.job_adapter import LinkedInJobSearchAdapter
 from ...callbacks import ProgressCallback
+from ...core.exceptions import AuthenticationError, RateLimitError, ScrapingError
+from ...ports.browser import BrowserPort
+from ...search.filters import JobSearchFilter
+from ...search.queries import JobSearchQuery
 from ..base import BaseScraper
-from .parser import clean_job_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,30 +25,38 @@ class JobSearchScraper(BaseScraper):
     
     Example:
         async with BrowserManager() as browser:
-            scraper = JobSearchScraper(browser.page)
+            scraper = JobSearchScraper(browser.browser_port)
             job_urls = await scraper.search(
                 keywords="software engineer",
                 location="San Francisco",
                 limit=10
             )
     """
-    
-    def __init__(self, page: Page, callback: Optional[ProgressCallback] = None):
+
+    def __init__(
+        self,
+        page_or_browser: BrowserPort | Any = None,
+        callback: ProgressCallback | None = None,
+        *,
+        page: BrowserPort | Any = None,
+    ):
         """
         Initialize job search scraper.
         
         Args:
-            page: Playwright page object
+            page_or_browser: BrowserPort instance or legacy page object
             callback: Optional progress callback
+            page: Keyword argument alias for page_or_browser (backward compatibility)
         """
-        super().__init__(page, callback)
-    
+        super().__init__(page_or_browser, callback, page=page)
+        self._adapter = LinkedInJobSearchAdapter(browser=self.browser)
+
     async def search(
         self,
-        keywords: Optional[str] = None,
-        location: Optional[str] = None,
+        keywords: str | None = None,
+        location: str | None = None,
         limit: int = 25
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Search for jobs on LinkedIn.
         
@@ -56,86 +68,47 @@ class JobSearchScraper(BaseScraper):
         Returns:
             List of job posting URLs
         """
-        logger.info(f"Starting job search: keywords='{keywords}', location='{location}'")
-        
+        logger.info("Starting job search: keywords='%s', location='%s'", keywords, location)
+
         search_url = self._build_search_url(keywords, location)
         await self.callback.on_start("JobSearch", search_url)
-        
-        await self.navigate_and_wait(search_url)
         await self.callback.on_progress("Navigated to search results", 20)
-        
+
+        loc_list = [location] if location else []
+        query = JobSearchQuery(
+            keywords=keywords,
+            filters=JobSearchFilter(location=loc_list),
+            limit=limit,
+        )
+
         try:
-            await self.page.wait_for_selector('a[href*="/jobs/view/"]', timeout=10000)
-        except:
-            logger.warning("No job listings found on page")
-            return []
-        
-        await self.wait_and_focus(1)
-        await self.scroll_page_to_bottom(pause_time=1, max_scrolls=3)
-        await self.callback.on_progress("Loaded job listings", 50)
-        
-        job_urls = await self._extract_job_urls(limit)
-        await self.callback.on_progress(f"Found {len(job_urls)} job URLs", 90)
-        
-        await self.callback.on_progress("Search complete", 100)
-        await self.callback.on_complete("JobSearch", job_urls)
-        
-        logger.info(f"Job search complete: found {len(job_urls)} jobs")
-        return job_urls
-    
+            search_page = await self._adapter.search_jobs(query)
+            job_urls = [item.linkedin_url for item in search_page.items]
+
+            await self.callback.on_progress("Loaded job listings", 50)
+            await self.callback.on_progress(f"Found {len(job_urls)} job URLs", 90)
+            await self.callback.on_progress("Search complete", 100)
+            await self.callback.on_complete("JobSearch", job_urls)
+
+            logger.info("Job search complete: found %d jobs", len(job_urls))
+            return job_urls
+        except (AuthenticationError, RateLimitError) as auth_or_rate_err:
+            logger.error("Authentication or rate limit error during job search: %s", auth_or_rate_err)
+            await self.callback.on_error(auth_or_rate_err)
+            raise
+        except Exception as e:
+            logger.exception("Unexpected error during job search: %s", e)
+            await self.callback.on_error(e)
+            raise ScrapingError(f"Failed to execute job search: {e}") from e
+
     def _build_search_url(
         self,
-        keywords: Optional[str] = None,
-        location: Optional[str] = None
+        keywords: str | None = None,
+        location: str | None = None
     ) -> str:
         """Build LinkedIn job search URL with parameters."""
-        base_url = "https://www.linkedin.com/jobs/search/"
-        
-        params = {}
-        if keywords:
-            params['keywords'] = keywords
-        if location:
-            params['location'] = location
-        
-        if params:
-            return f"{base_url}?{urlencode(params)}"
-        return base_url
-    
-    async def _extract_job_urls(self, limit: int) -> List[str]:
-        """
-        Extract job URLs from search results.
-        
-        Args:
-            limit: Maximum number of URLs to extract
-            
-        Returns:
-            List of job posting URLs
-        """
-        job_urls = []
-        
-        try:
-            # Find all job cards/links
-            job_links = await self.page.locator('a[href*="/jobs/view/"]').all()
-            
-            seen_urls = set()
-            for link in job_links:
-                if len(job_urls) >= limit:
-                    break
-                
-                try:
-                    href = await link.get_attribute('href')
-                    if href and '/jobs/view/' in href:
-                        clean_url = clean_job_url(href)
-                        
-                        # Avoid duplicates
-                        if clean_url not in seen_urls:
-                            job_urls.append(clean_url)
-                            seen_urls.add(clean_url)
-                except Exception as e:
-                    logger.debug(f"Error extracting job URL: {e}")
-                    continue
-        
-        except Exception as e:
-            logger.warning(f"Error extracting job URLs: {e}")
-        
-        return job_urls
+        query = JobSearchQuery(
+            keywords=keywords,
+            filters=JobSearchFilter(location=[location] if location else []),
+        )
+        return self._adapter._url_builder.build_job_url(query)

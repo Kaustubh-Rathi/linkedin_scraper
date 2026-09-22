@@ -1,154 +1,128 @@
-"""Unit tests for CompanyScraper DOM helpers (FakePage, no live LinkedIn)."""
-from unittest.mock import AsyncMock
+"""Unit tests for CompanyScraper and CompanyPostsScraper."""
 
 import pytest
 
+from linkedin_scraper.core.exceptions import AuthenticationError, RateLimitError, ScrapingError
+from linkedin_scraper.models.company import Company
+from linkedin_scraper.models.post import Post
+from linkedin_scraper.scrapers.company.posts import CompanyPostsScraper
 from linkedin_scraper.scrapers.company.scraper import CompanyScraper
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_get_name_returns_h1(fake_page_cls, fake_locator_cls):
-    page = fake_page_cls(
-        locator_factory=lambda selector: fake_locator_cls(count=1, text="Example Corp")
-    )
-    scraper = CompanyScraper(page)
-    assert await scraper._get_name() == "Example Corp"
+class MockBrowserForCompany:
+    def __init__(self, url="https://www.linkedin.com/company/acme-corp/", extract_map=None, eval_results=None):
+        self.url = url
+        self._extract_map = extract_map or {}
+        self._eval_results = list(eval_results or [])
+        self.goto_calls = []
+
+    async def goto(self, url, **kw):
+        self.goto_calls.append(url)
+
+    async def wait_for_load_state(self, *a, **kw):
+        pass
+
+    async def wait_for_selector(self, *a, **kw):
+        pass
+
+    async def wait_for_timeout(self, *a, **kw):
+        pass
+
+    async def query_selector_all(self, selector):
+        return []
+
+    async def extract_text_safe(self, selector, default="", timeout=2000):
+        return self._extract_map.get(selector, default)
+
+    async def evaluate(self, script, arg=None):
+        if self._eval_results:
+            return self._eval_results.pop(0)
+        return True
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_get_name_unknown_on_error(fake_page_cls, fake_locator_cls):
-    page = fake_page_cls(
-        locator_factory=lambda selector: fake_locator_cls(
-            raise_on_text=RuntimeError("missing")
-        )
-    )
-    # inner_text raises via FakeLocator only when text_content raises; override
-    loc = fake_locator_cls(count=1)
+async def test_company_scraper_scrape_success():
+    browser = MockBrowserForCompany(extract_map={"h1": "Acme Corp"})
+    scraper = CompanyScraper(browser)
+    company = await scraper.scrape("https://www.linkedin.com/company/acme-corp/")
 
-    async def boom():
-        raise RuntimeError("boom")
-
-    loc.inner_text = boom
-    page = fake_page_cls(locator_factory=lambda s: loc)
-    scraper = CompanyScraper(page)
-    assert await scraper._get_name() == "Unknown Company"
+    assert isinstance(company, Company)
+    assert company.name == "Acme Corp"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_get_about_finds_about_us_section(fake_page_cls, fake_locator_cls):
-    paragraph = fake_locator_cls(count=1, text="We build things.")
-    section = fake_locator_cls(count=1, text="About us\nWe build things.")
-    section._children = [paragraph]
-    # locator('p').all() uses children; also need section.inner_text
+async def test_company_scraper_propagates_auth_error():
+    browser = MockBrowserForCompany()
 
-    async def section_inner():
-        return "About us\nWe build things."
+    async def raise_auth(url, **kw):
+        raise AuthenticationError("Logged out")
 
-    section.inner_text = section_inner
-
-    def factory(selector):
-        if selector == "section":
-            return fake_locator_cls(count=1, children=[section])
-        if selector == "p":
-            return fake_locator_cls(count=1, children=[paragraph], text="We build things.")
-        return fake_locator_cls()
-
-    # CompanyScraper iterates sections via page.locator('section').all()
-    page = fake_page_cls()
-
-    async def sections_all():
-        return [section]
-
-    section_root = fake_locator_cls(count=1)
-    section_root.all = sections_all
-    section.locator = lambda sel: fake_locator_cls(
-        count=1, children=[paragraph], text="We build things."
-    )
-    page.locator = lambda sel: section_root if sel == "section" else fake_locator_cls()
-
-    scraper = CompanyScraper(page)
-    about = await scraper._get_about()
-    assert about == "We build things."
+    browser.goto = raise_auth
+    scraper = CompanyScraper(browser)
+    with pytest.raises(AuthenticationError):
+        await scraper.scrape("https://www.linkedin.com/company/acme-corp/")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_get_overview_classifies_info_items(fake_page_cls, fake_locator_cls):
-    items = [
-        fake_locator_cls(count=1, text="Software Development"),
-        fake_locator_cls(count=1, text="1,001-5,000 employees"),
-        fake_locator_cls(count=1, text="San Francisco, California"),
-    ]
-    for item in items:
+async def test_company_scraper_wraps_unexpected_error():
+    browser = MockBrowserForCompany()
 
-        async def make_inner(t=item._text):
-            return t
+    async def raise_crash(url, **kw):
+        raise RuntimeError("Browser crashed")
 
-        item.inner_text = make_inner
-
-    info_root = fake_locator_cls(count=3, children=items)
-
-    async def info_all():
-        return items
-
-    info_root.all = info_all
-
-    link = fake_locator_cls(
-        count=1, text="Visit website", attribute="https://example.com"
-    )
-
-    async def links_all():
-        return [link]
-
-    links_root = fake_locator_cls(count=1, children=[link])
-    links_root.all = links_all
-
-    def factory(selector):
-        if "info-item" in selector:
-            return info_root
-        if selector == "a":
-            return links_root
-        if selector == "dt":
-            return fake_locator_cls(count=0, children=[])
-        return fake_locator_cls()
-
-    page = fake_page_cls(locator_factory=factory)
-    scraper = CompanyScraper(page)
-    overview = await scraper._get_overview()
-    assert overview["industry"] == "Software Development"
-    assert overview["company_size"] == "1,001-5,000 employees"
-    assert overview["headquarters"] == "San Francisco, California"
+    browser.goto = raise_crash
+    scraper = CompanyScraper(browser)
+    with pytest.raises(ScrapingError, match="Failed to scrape company profile"):
+        await scraper.scrape("https://www.linkedin.com/company/acme-corp/")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_scrape_wires_fields(monkeypatch, fake_page_cls):
-    page = fake_page_cls()
-    scraper = CompanyScraper(page)
-    monkeypatch.setattr(scraper, "navigate_and_wait", AsyncMock())
-    monkeypatch.setattr(scraper, "_get_name", AsyncMock(return_value="Acme"))
-    monkeypatch.setattr(scraper, "_get_about", AsyncMock(return_value="About"))
-    monkeypatch.setattr(
-        scraper,
-        "_get_overview",
-        AsyncMock(
-            return_value={
-                "website": None,
-                "phone": None,
-                "headquarters": "SF",
-                "founded": None,
-                "industry": "Tech",
-                "company_type": None,
-                "company_size": "100",
-                "specialties": None,
-            }
-        ),
+async def test_company_posts_scraper_success():
+    browser = MockBrowserForCompany(
+        eval_results=[
+            None,  # trigger lazy load 1
+            None,  # trigger lazy load 2 (window.scrollTo)
+            True,  # has_posts check (includes urn:li:activity:)
+            [{"urn": "urn:li:activity:123", "author_name": "Acme Corp", "text": "Post text", "time_str": "1d", "reactions_count": 10}],
+        ]
     )
-    company = await scraper.scrape("https://www.linkedin.com/company/acme/")
-    assert company.name == "Acme"
-    assert company.about_us == "About"
-    assert company.industry == "Tech"
-    assert company.headquarters == "SF"
+
+    scraper = CompanyPostsScraper(browser)
+    posts = await scraper.scrape("https://www.linkedin.com/company/acme-corp/", limit=1)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].urn == "urn:li:activity:123"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_company_posts_scraper_propagates_rate_limit():
+    browser = MockBrowserForCompany()
+
+    async def raise_rate(url, **kw):
+        raise RateLimitError("Rate limited")
+
+    browser.goto = raise_rate
+    scraper = CompanyPostsScraper(browser)
+    with pytest.raises(RateLimitError):
+        await scraper.scrape("https://www.linkedin.com/company/acme-corp/")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_company_posts_scraper_wraps_unexpected_error():
+    browser = MockBrowserForCompany()
+
+    async def raise_crash(url, **kw):
+        raise RuntimeError("Browser disconnected")
+
+    browser.goto = raise_crash
+    scraper = CompanyPostsScraper(browser)
+    with pytest.raises(ScrapingError, match="Failed to scrape company posts"):
+        await scraper.scrape("https://www.linkedin.com/company/acme-corp/")

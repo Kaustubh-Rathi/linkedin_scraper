@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Post / Content Search Results | LinkedIn</title>
+</head>
+<body>
+  <div class="search-results-container">
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7198765432100000001">
+      <!-- Standard post result with /feed/update/ link format -->
+      <div class="update-components-actor">
+        <a class="app-aware-link" href="https://www.linkedin.com/in/satyanadella">
+          <span class="update-components-actor__name">Satya Nadella</span>
+          <span class="update-components-actor__description">Chairman and CEO at Microsoft</span>
+          <span class="update-components-actor__sub-description">2d • Edited</span>
+        </a>
+      </div>
+      <div class="feed-shared-update-v2__description-wrapper">
+        <div class="feed-shared-update-v2__description">
+          <a class="app-aware-link" href="https://www.linkedin.com/feed/update/urn:li:activity:7198765432100000001/?trk=feed_main">
+            Thrilled to share our latest advancements in AI infrastructure and developer tooling worldwide.
+          </a>
+        </div>
+      </div>
+      <div class="social-details-social-counts">
+        <span class="social-details-social-counts__reactions-count">3,892 reactions</span>
+        <span class="social-details-social-counts__comments">412 comments</span>
+      </div>
+    </div>
+
+    <!-- Post result with /posts/ URL format, emojis, hashtags -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7198765432100000002">
+      <div class="update-components-actor">
+        <span class="update-components-actor__name">Elena Rostova</span>
+        <span class="update-components-actor__description">Chief Technology Officer</span>
+        <span class="update-components-actor__sub-description">1w • Visible to anyone</span>
+      </div>
+      <div class="feed-shared-update-v2__description">
+        <a href="https://www.linkedin.com/posts/elena-rostova_python-rust-distributed-activity-7198765432100000002-abcd?utm_source=share">
+          🚀 We just open-sourced our high-performance Python/Rust async orchestration engine! #Python #Rust #OpenSource
+        </a>
+      </div>
+      <div class="social-details-social-counts">
+        <span class="social-details-social-counts__reactions-count">1.5k reactions</span>
+      </div>
+    </div>
+
+    <!-- Post with whitespace variations and multiple duplicate links within card -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7198765432100000003">
+      <div class="feed-shared-text">
+        <a class="app-aware-link" href="https://www.linkedin.com/feed/update/urn:li:activity:7198765432100000003/">
+          
+          Exploring new paradigms in distributed consensus protocols for low-latency databases.
+          
+        </a>
+      </div>
+      <!-- Duplicate link with tracking query params -->
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7198765432100000003/?trackingId=123#comments">View full conversation</a>
+    </div>
+
+    <!-- Post with missing optional fields -->
+    <div class="feed-shared-update-v2">
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7198765432100000004/">
+        Quick update on today's release.
+      </a>
+    </div>
+
+    <!-- Non-post links inside container -->
+    <div>
+      <a href="https://www.linkedin.com/in/someuser/">User profile</a>
+      <a href="/help/linkedin">Help</a>
+      <a href="#">Back to top</a>
+    </div>
+  </div>
+</body>
+</html>

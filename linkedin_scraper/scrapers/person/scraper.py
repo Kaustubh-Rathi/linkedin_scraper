@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-from playwright.async_api import Page
+import logging
+from typing import Any
 
-from ..base import BaseScraper
-from ...models import Person, Accomplishment, Interest
 from ...callbacks import ProgressCallback
-from ...core.exceptions import ScrapingError
+from ...core.exceptions import (
+    AuthenticationError,
+    RateLimitError,
+    RequiredFieldExtractionError,
+    ScrapingError,
+)
+from ...models import Accomplishment, Interest, Person
+from ...ports.browser import BrowserPort
+from ..base import BaseScraper
 from .accomplishments import AccomplishmentsExtractor
 from .contacts import ContactsExtractor
 from .education import EducationExtractor
@@ -16,6 +22,8 @@ from .experience import ExperienceExtractor
 from .interests import InterestsExtractor
 from .links import merge_contacts
 from .profile import ProfileExtractor
+
+logger = logging.getLogger(__name__)
 
 
 class PersonScraper(BaseScraper):
@@ -25,21 +33,28 @@ class PersonScraper(BaseScraper):
     independently testable while this class only orchestrates the scrape.
     """
 
-    def __init__(self, page: Page, callback: Optional[ProgressCallback] = None):
+    def __init__(
+        self,
+        page_or_browser: BrowserPort | Any = None,
+        callback: ProgressCallback | None = None,
+        *,
+        page: BrowserPort | Any = None,
+    ):
         """
         Initialize person scraper.
 
         Args:
-            page: Playwright page object
+            page_or_browser: BrowserPort instance or legacy page object
             callback: Progress callback
+            page: Keyword argument alias for page_or_browser (backward compatibility)
         """
-        super().__init__(page, callback)
-        self._profile = ProfileExtractor(self)
-        self._experience = ExperienceExtractor(self)
-        self._education = EducationExtractor(self)
-        self._interests = InterestsExtractor(self)
-        self._accomplishments = AccomplishmentsExtractor(self)
-        self._contacts = ContactsExtractor(self)
+        super().__init__(page_or_browser, callback, page=page)
+        self._profile = ProfileExtractor(self.browser)
+        self._experience = ExperienceExtractor(self.browser)
+        self._education = EducationExtractor(self.browser)
+        self._interests = InterestsExtractor(self.browser)
+        self._accomplishments = AccomplishmentsExtractor(self.browser)
+        self._contacts = ContactsExtractor(self.browser)
 
     async def scrape(
         self,
@@ -62,17 +77,24 @@ class PersonScraper(BaseScraper):
 
         Raises:
             AuthenticationError: If not logged in
+            RequiredFieldExtractionError: If required fields (e.g. name) cannot be extracted
             ScrapingError: If scraping fails
         """
+        if not linkedin_url:
+            raise RequiredFieldExtractionError(field_name="linkedin_url", entity_url=linkedin_url)
+
         await self.callback.on_start("person", linkedin_url)
 
         try:
             await self.navigate_and_wait(linkedin_url)
             await self.callback.on_progress("Navigated to profile", 10)
             await self.ensure_logged_in()
-            await self.page.wait_for_selector("main", timeout=10000)
+            await self.browser.wait_for_selector("main", timeout=10000)
 
             name, location = await self._profile.get_name_and_location()
+            if not name:
+                logger.error("Failed to extract required field 'name' for person profile: %s", linkedin_url)
+                raise RequiredFieldExtractionError(field_name="name", entity_url=linkedin_url)
             await self.callback.on_progress(f"Got name: {name}", 20)
 
             open_to_work = await self._profile.check_open_to_work()
@@ -87,12 +109,12 @@ class PersonScraper(BaseScraper):
             educations = await self._education.get_educations(linkedin_url)
             await self.callback.on_progress(f"Got {len(educations)} educations", 70)
 
-            interests: List[Interest] = []
+            interests: list[Interest] = []
             if include_interests:
                 interests = await self._interests.get_interests(linkedin_url)
                 await self.callback.on_progress(f"Got {len(interests)} interests", 80)
 
-            accomplishments: List[Accomplishment] = []
+            accomplishments: list[Accomplishment] = []
             if include_accomplishments:
                 accomplishments = await self._accomplishments.get_accomplishments(
                     linkedin_url
@@ -122,6 +144,12 @@ class PersonScraper(BaseScraper):
             await self.callback.on_complete("person", person)
             return person
 
+        except (AuthenticationError, RateLimitError, RequiredFieldExtractionError) as direct_err:
+            logger.error("Error while scraping person %s: %s", linkedin_url, direct_err)
+            await self.callback.on_error(direct_err)
+            raise
         except Exception as e:
+            logger.exception("Unexpected error while scraping person %s: %s", linkedin_url, e)
             await self.callback.on_error(e)
-            raise ScrapingError(f"Failed to scrape person profile: {e}")
+            raise ScrapingError(f"Failed to scrape person profile: {e}") from e
+

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Job Search Results | LinkedIn</title>
+</head>
+<body>
+  <div class="jobs-search-results-list">
+    <ul class="jobs-search__results-list">
+      <!-- Card 1: Standard job card with full fields and Easy Apply -->
+      <li class="jobs-search-results__list-item" data-occludable-job-id="3891234567">
+        <div class="job-card-container">
+          <div class="job-card-list__entity-lockup">
+            <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/3891234567/?trackingId=abc%3D%3D&refId=def">
+              <strong aria-hidden="true">Senior Python Engineer</strong>
+            </a>
+            <div class="artdeco-entity-lockup__subtitle">
+              <span class="job-card-container__primary-description">Acme Analytics</span>
+            </div>
+            <ul class="job-card-container__metadata-wrapper">
+              <li class="job-card-container__metadata-item">San Francisco, CA (Hybrid)</li>
+            </ul>
+          </div>
+          <div class="job-card-list__footer-wrapper">
+            <time class="job-card-container__list-date" datetime="2026-08-11">3 days ago</time>
+            <span class="job-card-container__easy-apply-badge">Easy Apply</span>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 2: Formatted relative dates ("1 week ago", "Just posted", "Reposted 2 days ago") without Easy Apply -->
+      <li class="jobs-search-results__list-item" data-occludable-job-id="3891234568">
+        <div class="job-card-container">
+          <div class="job-card-list__entity-lockup">
+            <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/3891234568/">
+              Lead Systems Architect
+            </a>
+            <div class="artdeco-entity-lockup__subtitle">
+              <span class="job-card-container__primary-description">CloudScale Technologies</span>
+            </div>
+            <ul class="job-card-container__metadata-wrapper">
+              <li class="job-card-container__metadata-item">New York, NY (On-site)</li>
+            </ul>
+          </div>
+          <div class="job-card-list__footer-wrapper">
+            <time class="job-card-container__list-date" datetime="2026-08-07">1 week ago</time>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 3: Whitespace, newlines, promote badges -->
+      <li class="jobs-search-results__list-item" data-occludable-job-id="3891234569">
+        <div class="job-card-container">
+          <div class="job-card-list__entity-lockup">
+            <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/3891234569/?trk=public_jobs_jserp-result_search-card">
+              
+              Staff Machine Learning Engineer
+              <span class="visually-hidden">Actively hiring</span>
+            </a>
+            <div class="artdeco-entity-lockup__subtitle">
+              <span class="job-card-container__primary-description">
+                DeepMind
+              </span>
+            </div>
+            <ul class="job-card-container__metadata-wrapper">
+              <li class="job-card-container__metadata-item">
+                London, England (Remote)
+              </li>
+            </ul>
+          </div>
+          <div class="job-card-list__footer-wrapper">
+            <time class="job-card-container__list-date">Reposted 2 days ago</time>
+            <span class="job-card-container__easy-apply-badge">Easy Apply</span>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 4: Missing optional fields (no company, no location, no posted date) -->
+      <li class="jobs-search-results__list-item" data-occludable-job-id="3891234570">
+        <div class="job-card-container">
+          <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/3891234570/">
+            Principal Security Researcher
+          </a>
+        </div>
+      </li>
+
+      <!-- Card 5: Non-job links to filter / ignore -->
+      <li class="jobs-search-results__list-item">
+        <a href="https://www.linkedin.com/jobs/collections/recommended/">See more jobs</a>
+        <a href="#">Bookmark</a>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>

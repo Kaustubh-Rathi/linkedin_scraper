@@ -1,6 +1,7 @@
 """Pydantic models for LinkedIn Company data."""
 
 from typing import List, Optional
+
 from pydantic import Field, field_validator
 
 from .base import BaseScraperModel
@@ -42,7 +43,7 @@ class Company(BaseScraperModel):
     showcase_pages: List[CompanySummary] = Field(default_factory=list)
     affiliated_companies: List[CompanySummary] = Field(default_factory=list)
     employees: List[Employee] = Field(default_factory=list)
-    
+
     @field_validator('linkedin_url')
     @classmethod
     def validate_linkedin_url(cls, v: str) -> str:

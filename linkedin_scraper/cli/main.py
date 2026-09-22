@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from typing import List, Optional
 
 from . import commands
 
@@ -13,7 +12,7 @@ from . import commands
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="linkedin-scraper",
-        description="Scrape LinkedIn profiles, companies, jobs, and posts.",
+        description="Scrape LinkedIn profiles, companies, jobs, posts, and search entities.",
     )
     parser.add_argument(
         "--session",
@@ -59,10 +58,61 @@ def build_parser() -> argparse.ArgumentParser:
     posts.add_argument("--headed", action="store_true", help="Show the browser")
     posts.add_argument("--output", "-o", help="Write JSON to this file")
 
+    search = sub.add_parser(
+        "search",
+        help="Search LinkedIn entities (people, companies, jobs, posts, employees)",
+    )
+    search.add_argument(
+        "type",
+        choices=[
+            "people",
+            "person",
+            "companies",
+            "company",
+            "jobs",
+            "job",
+            "posts",
+            "post",
+            "employees",
+            "employee",
+        ],
+        help="Entity type to search for",
+    )
+    search.add_argument("--keywords", "-k", help="Search query keywords")
+    search.add_argument("--location", "-l", help="Location filter")
+    search.add_argument(
+        "--company", help="Company filter (name, URN, or identifier)"
+    )
+    search.add_argument("--title", help="Job title or designation filter")
+    search.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=25,
+        help="Max results to return (default: 25)",
+    )
+    search.add_argument(
+        "--page-size",
+        type=int,
+        default=10,
+        help="Results per page request (default: 10)",
+    )
+    search.add_argument(
+        "--format",
+        "-f",
+        choices=["json", "csv", "jsonl"],
+        default=None,
+        help="Export format (default: auto-detected or json)",
+    )
+    search.add_argument("--headed", action="store_true", help="Show the browser")
+    search.add_argument(
+        "--output", "-o", help="Write exported results to this file"
+    )
+
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     session = args.session
@@ -115,12 +165,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                     output=args.output,
                 )
             )
+        if args.command == "search":
+            return asyncio.run(
+                commands.cmd_search(
+                    entity_type=args.type,
+                    keywords=args.keywords,
+                    location=args.location,
+                    company=args.company,
+                    title=args.title,
+                    limit=args.limit,
+                    page_size=args.page_size,
+                    export_format=args.format,
+                    session=session,
+                    headed=args.headed,
+                    output=args.output,
+                )
+            )
     except FileNotFoundError as exc:
-        print("Session file not found: {}".format(exc), file=sys.stderr)
+        print(f"Session file not found: {exc}", file=sys.stderr)
         print("Run: linkedin-scraper login", file=sys.stderr)
         return 1
     except Exception as exc:
-        print("Error: {}".format(exc), file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     parser.error("Unknown command")

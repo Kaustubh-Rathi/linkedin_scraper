@@ -49,7 +49,9 @@ class FakeLocator:
             raise self._raise_on_text
         return self._text
 
-    async def inner_text(self) -> str:
+    async def inner_text(self, timeout: Optional[float] = None) -> str:
+        if self._raise_on_text:
+            raise self._raise_on_text
         return self._text or ""
 
     async def get_attribute(self, name: str, timeout: Optional[float] = None) -> Optional[str]:
@@ -155,6 +157,9 @@ class FakePage:
         self.click_calls.append(selector)
 
     async def press(self, key: str) -> None:
+        return None
+
+    async def keyboard_press(self, key: str) -> None:
         return None
 
     async def bring_to_front(self) -> None:

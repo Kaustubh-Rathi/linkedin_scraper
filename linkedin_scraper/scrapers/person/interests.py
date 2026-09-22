@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import List, Optional, Set
 
+from ...core.exceptions import AuthenticationError, RateLimitError
 from ...models import Interest
-from .links import profile_detail_url
+from ...parsers.person import (
+    map_interest_tab_to_category,
+    parse_interest_item,
+)
+from ...ports.browser import ElementPort
 from ._extractor import SectionExtractor
+from .links import profile_detail_url
 
 logger = logging.getLogger(__name__)
 
@@ -15,62 +21,52 @@ logger = logging.getLogger(__name__)
 class InterestsExtractor(SectionExtractor):
     """Extracts the tabbed Interests section of a profile."""
 
-    async def get_interests(self, base_url: str) -> List[Interest]:
+    async def get_interests(self, base_url: str) -> list[Interest]:
         """Extract interests from the main profile page Interests section with tablist."""
-        interests: List[Interest] = []
+        interests: list[Interest] = []
 
         try:
-            interests_heading = self.page.locator('h2:has-text("Interests")').first
+            tabs = await self.browser.query_selector_all('[role="tab"], tab')
 
-            if await interests_heading.count() > 0:
-                interests_section = interests_heading.locator(
-                    'xpath=ancestor::*[.//tablist or .//*[@role="tablist"]][1]'
-                )
-                if await interests_section.count() == 0:
-                    interests_section = interests_heading.locator("xpath=ancestor::*[4]")
-
-                tabs = (
-                    await interests_section.locator('[role="tab"], tab').all()
-                    if await interests_section.count() > 0
-                    else []
-                )
-
-                if tabs:
-                    for tab in tabs:
-                        try:
-                            tab_name = await tab.text_content()
-                            if not tab_name:
-                                continue
-                            tab_name = tab_name.strip()
-                            category = self._map_interest_tab_to_category(tab_name)
-
-                            await tab.click()
-                            await self.wait_and_focus(0.5)
-
-                            tabpanel = interests_section.locator('[role="tabpanel"]').first
-                            if await tabpanel.count() > 0:
-                                list_items = await tabpanel.locator("li, listitem").all()
-
-                                for item in list_items:
-                                    try:
-                                        interest = await self._parse_interest_item(item, category)
-                                        if interest:
-                                            interests.append(interest)
-                                    except Exception as e:
-                                        logger.debug(f"Error parsing interest item: {e}")
-                                        continue
-                        except Exception as e:
-                            logger.debug(f"Error processing interest tab: {e}")
+            if tabs:
+                for tab in tabs:
+                    try:
+                        tab_name = await tab.text_content()
+                        if not tab_name:
                             continue
+                        tab_name = tab_name.strip()
+                        category = map_interest_tab_to_category(tab_name)
+
+                        await tab.click()
+                        await asyncio.sleep(0.5)
+
+                        tabpanels = await self.browser.query_selector_all('[role="tabpanel"], tabpanel')
+                        if tabpanels:
+                            list_items = await tabpanels[0].query_selector_all(
+                                "li, listitem, .pvs-list__paged-list-item"
+                            )
+                            for item in list_items:
+                                try:
+                                    interest = await self._parse_interest_item(item, category)
+                                    if interest:
+                                        interests.append(interest)
+                                except Exception as e:
+                                    logger.debug("Error parsing interest item: %s", e)
+                                    continue
+                    except Exception as e:
+                        logger.debug("Error processing interest tab: %s", e)
+                        continue
 
             if not interests:
                 interests_url = profile_detail_url(base_url, "details/interests/")
-                await self.navigate_and_wait(interests_url)
-                await self.page.wait_for_selector("main", timeout=10000)
-                await self.wait_and_focus(1.5)
+                await self.browser.goto(interests_url, wait_until="domcontentloaded")
+                try:
+                    await self.browser.wait_for_selector("main", timeout=10000)
+                except Exception as exc:
+                    logger.debug("Interests main wait timed out: %s", exc)
+                await asyncio.sleep(1.5)
 
-                tabs = await self.page.locator('[role="tab"], tab').all()
-
+                tabs = await self.browser.query_selector_all('[role="tab"], tab')
                 if not tabs:
                     logger.debug("No interests tabs found on profile")
                     return interests
@@ -81,66 +77,60 @@ class InterestsExtractor(SectionExtractor):
                         if not tab_name:
                             continue
                         tab_name = tab_name.strip()
-                        category = self._map_interest_tab_to_category(tab_name)
+                        category = map_interest_tab_to_category(tab_name)
 
                         await tab.click()
-                        await self.wait_and_focus(0.8)
+                        await asyncio.sleep(0.8)
 
-                        tabpanel = self.page.locator('[role="tabpanel"], tabpanel').first
-                        list_items = await tabpanel.locator(
-                            "listitem, li, .pvs-list__paged-list-item"
-                        ).all()
-
-                        for item in list_items:
-                            try:
-                                interest = await self._parse_interest_item(item, category)
-                                if interest:
-                                    interests.append(interest)
-                            except Exception as e:
-                                logger.debug(f"Error parsing interest item: {e}")
-                                continue
+                        tabpanels = await self.browser.query_selector_all('[role="tabpanel"], tabpanel')
+                        if tabpanels:
+                            list_items = await tabpanels[0].query_selector_all(
+                                "listitem, li, .pvs-list__paged-list-item"
+                            )
+                            for item in list_items:
+                                try:
+                                    interest = await self._parse_interest_item(item, category)
+                                    if interest:
+                                        interests.append(interest)
+                                except Exception as e:
+                                    logger.debug("Error parsing interest item: %s", e)
+                                    continue
 
                     except Exception as e:
-                        logger.debug(f"Error processing interest tab: {e}")
+                        logger.debug("Error processing interest tab: %s", e)
                         continue
 
+        except (AuthenticationError, RateLimitError):
+            raise
         except Exception as e:
-            logger.warning(f"Error getting interests: {e}")
+            logger.warning("Error getting interests: %s", e)
 
         return interests
 
-    async def _parse_interest_item(self, item, category: str) -> Optional[Interest]:
-        """Parse a single interest item from profile or details page."""
+    async def _parse_interest_item(self, item: ElementPort, category: str) -> Interest | None:
+        """Extract raw attributes/text from item and delegate to pure parser."""
         try:
-            link = item.locator("a, link").first
-            if await link.count() == 0:
+            links = await item.query_selector_all("a, link")
+            if not links:
                 return None
-            href = await link.get_attribute("href")
+            href = await links[0].get_attribute("href")
 
             unique_texts = await self._extract_unique_texts_from_element(item)
-            name = unique_texts[0] if unique_texts else None
-
-            if name and href:
-                return Interest(
-                    name=name,
-                    category=category,
-                    linkedin_url=href,
-                )
-            return None
+            return parse_interest_item(unique_texts, href, category)
         except Exception as e:
-            logger.debug(f"Error parsing interest: {e}")
+            logger.debug("Error parsing interest: %s", e)
             return None
 
-    async def _extract_unique_texts_from_element(self, element) -> List[str]:
+    async def _extract_unique_texts_from_element(self, element: ElementPort) -> list[str]:
         """Extract unique text content from nested elements, avoiding duplicates from parent/child overlap."""
-        text_elements = await element.locator(
+        text_elements = await element.query_selector_all(
             'span[aria-hidden="true"], div > span'
-        ).all()
+        )
 
         if not text_elements:
-            text_elements = await element.locator("span, div").all()
+            text_elements = await element.query_selector_all("span, div")
 
-        seen_texts: Set[str] = set()
+        seen_texts: set[str] = set()
         unique_texts = []
 
         for el in text_elements:
@@ -159,17 +149,7 @@ class InterestsExtractor(SectionExtractor):
 
         return unique_texts
 
-    def _map_interest_tab_to_category(self, tab_name: str) -> str:
-        tab_lower = tab_name.lower()
-        if "compan" in tab_lower:
-            return "company"
-        elif "group" in tab_lower:
-            return "group"
-        elif "school" in tab_lower:
-            return "school"
-        elif "newsletter" in tab_lower:
-            return "newsletter"
-        elif "voice" in tab_lower or "influencer" in tab_lower:
-            return "influencer"
-        else:
-            return tab_lower
+    @staticmethod
+    def _map_interest_tab_to_category(tab_name: str) -> str:
+        """Map interest tab heading to normalized category via pure parser."""
+        return map_interest_tab_to_category(tab_name)

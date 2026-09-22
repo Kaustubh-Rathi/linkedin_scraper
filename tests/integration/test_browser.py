@@ -1,6 +1,5 @@
 """Tests for BrowserManager."""
 import pytest
-from pathlib import Path
 from linkedin_scraper import BrowserManager
 
 
@@ -19,9 +18,14 @@ async def test_browser_manager_context():
 async def test_browser_manager_navigation():
     """Test basic navigation."""
     async with BrowserManager(headless=True) as browser:
-        await browser.page.goto("https://www.google.com")
+        await browser.page.route("**/local-test", lambda route: route.fulfill(
+            status=200,
+            content_type="text/html",
+            body="<html><head><title>Local Test Page</title></head><body>Hello</body></html>"
+        ))
+        await browser.page.goto("http://localhost/local-test")
         title = await browser.page.title()
-        assert "Google" in title
+        assert "Local Test Page" in title
 
 
 @pytest.mark.integration
@@ -29,15 +33,19 @@ async def test_browser_manager_navigation():
 async def test_browser_manager_session_save_load(tmp_path):
     """Test session save and load."""
     session_file = tmp_path / "test_session.json"
-    
+
     async with BrowserManager(headless=True) as browser:
-        # Navigate to a page
-        await browser.page.goto("https://www.google.com")
-        
+        await browser.page.route("**/local-test", lambda route: route.fulfill(
+            status=200,
+            content_type="text/html",
+            body="<html><head><title>Local Test</title></head><body>Hello</body></html>"
+        ))
+        await browser.page.goto("http://localhost/local-test")
+
         # Save session
         await browser.save_session(str(session_file))
         assert session_file.exists()
-    
+
     # Load session in new browser
     async with BrowserManager(headless=True) as browser:
         await browser.load_session(str(session_file))
@@ -52,6 +60,6 @@ async def test_browser_manager_headless_mode():
     """Test headless mode."""
     async with BrowserManager(headless=True) as browser:
         assert browser.page is not None
-        await browser.page.goto("https://www.example.com")
+        await browser.page.set_content("<html><body><h1>Example Page</h1></body></html>")
         content = await browser.page.content()
-        assert len(content) > 0
+        assert "Example Page" in content

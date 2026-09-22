@@ -81,6 +81,44 @@ def test_build_parser_login():
 
 
 @pytest.mark.unit
+def test_build_parser_search_flags():
+    args = build_parser().parse_args(
+        [
+            "search",
+            "people",
+            "--keywords",
+            "software architect",
+            "--location",
+            "San Francisco",
+            "--company",
+            "Google",
+            "--title",
+            "Architect",
+            "--limit",
+            "50",
+            "--page-size",
+            "20",
+            "--format",
+            "csv",
+            "-o",
+            "results.csv",
+            "--headed",
+        ]
+    )
+    assert args.command == "search"
+    assert args.type == "people"
+    assert args.keywords == "software architect"
+    assert args.location == "San Francisco"
+    assert args.company == "Google"
+    assert args.title == "Architect"
+    assert args.limit == 50
+    assert args.page_size == 20
+    assert args.format == "csv"
+    assert args.output == "results.csv"
+    assert args.headed is True
+
+
+@pytest.mark.unit
 def test_main_requires_subcommand(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main([])

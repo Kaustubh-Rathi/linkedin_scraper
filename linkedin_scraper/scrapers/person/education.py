@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import List
 
+from ...core.exceptions import AuthenticationError, RateLimitError
+from ...core.page_actions import scroll_to_bottom
 from ...models import Education
-from .links import attach_organization_urls, profile_detail_url
-from .parser import (
-    item_text_and_url,
+from ...parsers.person import (
     parse_education_lines,
     parse_educations_text,
 )
+from ..base import PROFILE_COMPONENT_ITEMS
 from ._extractor import SectionExtractor
+from .links import attach_organization_urls, extract_item_text_and_url, profile_detail_url
 
 logger = logging.getLogger(__name__)
 
@@ -20,46 +21,51 @@ logger = logging.getLogger(__name__)
 class EducationExtractor(SectionExtractor):
     """Extracts and normalizes the Education section of a profile."""
 
-    async def get_educations(self, base_url: str) -> List[Education]:
+    async def get_educations(self, base_url: str) -> list[Education]:
         """Extract educations from the details/education page (complete list)."""
         try:
             return await self._fetch_educations_from_details(base_url)
+        except (AuthenticationError, RateLimitError):
+            raise
         except Exception as e:
             logger.warning(
-                f"Error getting educations: {e}. The education section may not be publicly visible or the page structure has changed."
+                "Error getting educations: %s. The education section may not be publicly visible or the page structure has changed.",
+                e,
             )
             return []
 
-    async def _fetch_educations_from_details(self, base_url: str) -> List[Education]:
+    async def _fetch_educations_from_details(self, base_url: str) -> list[Education]:
         """Scrape complete education cards, with text as a fallback."""
         edu_url = profile_detail_url(base_url, "details/education/")
-        await self.navigate_and_wait(edu_url)
-        await self.wait_for_detail_section("Education")
-        await self.scroll_page_to_bottom(pause_time=0.3, max_scrolls=3)
+        await self.browser.goto(edu_url, wait_until="domcontentloaded")
+        await self._wait_for_detail_section("Education")
+        await scroll_to_bottom(self.browser, pause_time=0.3, max_scrolls=3)
 
         educations = await self._parse_education_cards()
         if educations:
             return self._dedupe_educations(educations)
 
-        page_text = await self.page.locator("main").first.inner_text()
-        educations = parse_educations_text(page_text)
-        if educations:
-            educations = await attach_organization_urls(
-                self.page, educations, "/school/"
-            )
-            return self._dedupe_educations(educations)
+        main_elements = await self.browser.query_selector_all("main")
+        if main_elements:
+            page_text = await main_elements[0].inner_text()
+            educations = parse_educations_text(page_text)
+            if educations:
+                educations = await attach_organization_urls(
+                    self.browser, educations, "/school/"
+                )
+                return self._dedupe_educations(educations)
 
-        await self.navigate_and_wait(base_url)
+        await self.browser.goto(base_url, wait_until="domcontentloaded")
         educations = await self._parse_education_cards()
         return self._dedupe_educations(educations)
 
-    async def _parse_education_cards(self) -> List[Education]:
+    async def _parse_education_cards(self) -> list[Education]:
         """Parse visible education cards and preserve school links when present."""
         educations = []
-        items = await self.locate_profile_component_items()
+        items = await self.browser.query_selector_all(PROFILE_COMPONENT_ITEMS)
         for item in items:
             try:
-                lines, institution_url = await item_text_and_url(item, "/school/")
+                lines, institution_url = await extract_item_text_and_url(item, "/school/")
                 education = parse_education_lines(lines, institution_url)
                 if education:
                     educations.append(education)
@@ -68,7 +74,7 @@ class EducationExtractor(SectionExtractor):
         return educations
 
     @staticmethod
-    def _dedupe_educations(educations: List[Education]) -> List[Education]:
+    def _dedupe_educations(educations: list[Education]) -> list[Education]:
         """Remove duplicate cards emitted by overlapping selectors."""
         by_key = {}
         for education in educations:

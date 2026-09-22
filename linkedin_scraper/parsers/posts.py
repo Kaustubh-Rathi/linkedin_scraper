@@ -1,15 +1,11 @@
-"""Pure parsing helpers for LinkedIn company posts.
+"""Pure, browser-independent parsing logic for LinkedIn company posts."""
 
-Kept free of Playwright so URL building, time/count extraction, and
-`Post` construction can be unit tested without a browser.
-`CompanyPostsScraper` remains the orchestrator that drives the page and
-feeds extracted JS data into these helpers.
-"""
+from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Sequence
 
-from ...models.post import Post
+from ..models.post import Post
 
 _TIME_RE = re.compile(
     r"(\d+[hdwmy]|\d+\s*(?:hour|day|week|month|year)s?\s*ago)", re.IGNORECASE
@@ -21,11 +17,11 @@ def build_posts_url(company_url: str) -> str:
     """Build the `/posts/` feed URL for a company page."""
     company_url = company_url.rstrip("/")
     if "/posts" not in company_url:
-        return "{}/posts/".format(company_url)
+        return f"{company_url}/posts/"
     return company_url
 
 
-def extract_time_from_text(text: str) -> Optional[str]:
+def extract_time_from_text(text: str) -> str | None:
     """Extract a relative time (e.g. "3d", "2 weeks ago") from actor text."""
     if not text:
         return None
@@ -38,26 +34,21 @@ def extract_time_from_text(text: str) -> Optional[str]:
     return None
 
 
-def parse_count(text: str) -> Optional[int]:
+def parse_count(text: str) -> int | None:
     """Parse a leading number (e.g. reactions/comments count) out of text."""
-    if not text:
+    if not text or not isinstance(text, str):
         return None
-    try:
-        numbers = _COUNT_RE.findall(text.replace(",", ""))
-        if numbers:
-            return int(numbers[0])
-    except Exception:
-        pass
+    numbers = _COUNT_RE.findall(text.replace(",", ""))
+    if numbers and numbers[0].isdigit():
+        return int(numbers[0])
     return None
 
 
-def post_from_js_data(data: Dict[str, Any]) -> Post:
+def post_from_js_data(data: dict[str, Any]) -> Post:
     """Build a `Post` model from one item of the page-evaluated JS extract."""
     activity_id = data["urn"].replace("urn:li:activity:", "")
     return Post(
-        linkedin_url="https://www.linkedin.com/feed/update/urn:li:activity:{}/".format(
-            activity_id
-        ),
+        linkedin_url=f"https://www.linkedin.com/feed/update/urn:li:activity:{activity_id}/",
         urn=data["urn"],
         text=data["text"],
         posted_date=extract_time_from_text(data.get("timeText", "")),
@@ -66,3 +57,12 @@ def post_from_js_data(data: Dict[str, Any]) -> Post:
         reposts_count=parse_count(data.get("reposts", "")),
         image_urls=data.get("images", []),
     )
+
+
+def parse_company_posts(posts_data: Sequence[dict[str, Any]]) -> list[Post]:
+    """Parse raw JS post dictionaries into Post models."""
+    posts: list[Post] = []
+    for data in posts_data:
+        if "urn" in data and "text" in data:
+            posts.append(post_from_js_data(data))
+    return posts

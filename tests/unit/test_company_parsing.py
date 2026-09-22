@@ -1,11 +1,16 @@
 """Tests for linkedin_scraper.scrapers.company_parsing."""
 import pytest
 
-from linkedin_scraper.scrapers.company.parser import (
+from linkedin_scraper.parsers.company import (
     apply_dt_dd_label,
     classify_info_item,
     empty_overview,
+    parse_about_section,
+    parse_company_name,
+    parse_company_overview,
+    parse_company_profile,
 )
+
 
 
 @pytest.mark.unit
@@ -144,3 +149,97 @@ def test_apply_dt_dd_label_unknown_label_leaves_overview_unchanged():
     overview = empty_overview()
     apply_dt_dd_label("Something Unrelated", "value", overview)
     assert overview == empty_overview()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw_name,expected",
+    [
+        ("Acme Inc", "Acme Inc"),
+        ("  Google  ", "Google"),
+        ("", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_parse_company_name(raw_name, expected):
+    assert parse_company_name(raw_name) == expected
+
+
+
+@pytest.mark.unit
+def test_parse_about_section_finds_first_nonempty_paragraph():
+    sections = [
+        ("Overview\nSome info", ["Not about us"]),
+        ("About us\nDetailed description", ["   ", "We develop next-gen tools.", "Second paragraph"]),
+    ]
+    assert parse_about_section(sections) == "We develop next-gen tools."
+
+
+@pytest.mark.unit
+def test_parse_about_section_missing_returns_none():
+    sections = [
+        ("Overview\nSome info", ["Not about us"]),
+        ("Jobs\nJob list", ["Software Engineer"]),
+    ]
+    assert parse_about_section(sections) is None
+
+
+@pytest.mark.unit
+def test_parse_company_overview_with_info_items_and_link():
+    info_items = ["Software Development", "10,001+ employees", "Redmond, Washington"]
+    links = [("https://microsoft.com", "Visit website")]
+    overview = parse_company_overview(info_items, links)
+    assert overview["industry"] == "Software Development"
+    assert overview["company_size"] == "10,001+ employees"
+    assert overview["headquarters"] == "Redmond, Washington"
+    assert overview["website"] == "https://microsoft.com"
+    assert overview["phone"] is None
+
+
+@pytest.mark.unit
+def test_parse_company_overview_dt_dd_fallback():
+    info_items = []
+    links = []
+    dt_dd_pairs = [
+        ("Website", "https://example.com"),
+        ("Industry", "Technology"),
+        ("Headquarters", "Austin, TX"),
+        ("Founded", "2010"),
+        ("Company size", "50-100 employees"),
+        ("Type", "Privately Held"),
+        ("Specialties", "AI, Cloud"),
+        ("Phone", "555-0100"),
+    ]
+    overview = parse_company_overview(info_items, links, dt_dd_pairs)
+    assert overview["website"] == "https://example.com"
+    assert overview["industry"] == "Technology"
+    assert overview["headquarters"] == "Austin, TX"
+    assert overview["founded"] == "2010"
+    assert overview["company_size"] == "50-100 employees"
+    assert overview["company_type"] == "Privately Held"
+    assert overview["specialties"] == "AI, Cloud"
+    assert overview["phone"] == "555-0100"
+
+
+@pytest.mark.unit
+def test_parse_company_profile_constructs_model():
+    from linkedin_scraper.models import Company
+    info_items = ["Software Development", "500 employees", "New York, New York"]
+    links = [("https://example.com", "Learn more")]
+    company = parse_company_profile(
+        linkedin_url="https://www.linkedin.com/company/example/",
+        name="Example Inc",
+        about_us="About Example",
+        info_item_texts=info_items,
+        links=links,
+    )
+    assert isinstance(company, Company)
+    assert company.linkedin_url == "https://www.linkedin.com/company/example/"
+    assert company.name == "Example Inc"
+    assert company.about_us == "About Example"
+    assert company.industry == "Software Development"
+    assert company.company_size == "500 employees"
+    assert company.headquarters == "New York, New York"
+    assert company.website == "https://example.com"
+

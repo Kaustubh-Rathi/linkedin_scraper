@@ -83,7 +83,23 @@ async def test_get_attribute_safe_returns_default_when_none(fake_page_cls, fake_
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_get_attribute_safe_returns_default_on_exception(fake_page_cls, fake_locator_cls):
+async def test_get_attribute_safe_returns_default_on_timeout(fake_page_cls, fake_locator_cls):
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    page = fake_page_cls(
+        locator_factory=lambda selector: fake_locator_cls(
+            raise_on_attribute=PlaywrightTimeoutError("timeout")
+        )
+    )
+    scraper = BaseScraper(page=page)
+
+    result = await scraper.get_attribute_safe("a", "href", default="fallback")
+    assert result == "fallback"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_attribute_safe_propagates_unexpected_exception(fake_page_cls, fake_locator_cls):
     page = fake_page_cls(
         locator_factory=lambda selector: fake_locator_cls(
             raise_on_attribute=RuntimeError("boom")
@@ -91,9 +107,8 @@ async def test_get_attribute_safe_returns_default_on_exception(fake_page_cls, fa
     )
     scraper = BaseScraper(page=page)
 
-    result = await scraper.get_attribute_safe("a", "href", default="fallback")
-
-    assert result == "fallback"
+    with pytest.raises(RuntimeError, match="boom"):
+        await scraper.get_attribute_safe("a", "href", default="fallback")
 
 
 @pytest.mark.unit
