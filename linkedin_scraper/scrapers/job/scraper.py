@@ -30,6 +30,7 @@ from ...parsers.job import (
     parse_top_card_parts,
 )
 from ...ports.browser import BrowserPort
+from ...selectors import Job as JobSelectors
 from ..base import BaseScraper
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class JobScraper(BaseScraper):
 
         page: BrowserPort | Any = None,
 
+    throttler: Any | None = None,
     ):
 
         """
@@ -90,7 +92,7 @@ class JobScraper(BaseScraper):
 
         """
 
-        super().__init__(page_or_browser, callback, page=page)
+        super().__init__(page_or_browser, callback, page=page, throttler=throttler)
 
 
 
@@ -252,19 +254,7 @@ class JobScraper(BaseScraper):
 
         # 1. Try legacy/modern CSS class selectors first
 
-        SELECTORS = [
-
-            ".job-details-jobs-unified-top-card__primary-description-container",
-
-            ".job-details-jobs-unified-top-card__primary-description",
-
-            ".jobs-unified-top-card__subtitle-primary-grouping",
-
-            ".jobs-unified-top-card__metadata-container",
-
-        ]
-
-        for sel in SELECTORS:
+        for sel in JobSelectors.TOP_CARD_CONTAINERS:
 
             text = await self.browser.extract_text_safe(sel, default="")
 
@@ -448,11 +438,11 @@ class JobScraper(BaseScraper):
 
         title = await self._get_job_title()
 
-        elements = await self.browser.query_selector_all("main span, main div")
+        elements = await self.browser.query_selector_all(JobSelectors.MAIN_TEXT_BLOCKS)
 
         if not elements:
 
-            elements = await self.browser.query_selector_all("span, div")
+            elements = await self.browser.query_selector_all(JobSelectors.TEXT_BLOCKS)
 
         for elem in elements:
 
@@ -470,11 +460,11 @@ class JobScraper(BaseScraper):
 
         """Fallback posted-date scan when top-card parse misses."""
 
-        elements = await self.browser.query_selector_all("main span, main div")
+        elements = await self.browser.query_selector_all(JobSelectors.MAIN_TEXT_BLOCKS)
 
         if not elements:
 
-            elements = await self.browser.query_selector_all("span, div")
+            elements = await self.browser.query_selector_all(JobSelectors.TEXT_BLOCKS)
 
         for elem in elements:
 
@@ -492,11 +482,11 @@ class JobScraper(BaseScraper):
 
         """Fallback applicant-count scan when top-card parse misses."""
 
-        elements = await self.browser.query_selector_all("main span, main div")
+        elements = await self.browser.query_selector_all(JobSelectors.MAIN_TEXT_BLOCKS)
 
         if not elements:
 
-            elements = await self.browser.query_selector_all("span, div")
+            elements = await self.browser.query_selector_all(JobSelectors.TEXT_BLOCKS)
 
         for elem in elements:
 
@@ -592,7 +582,7 @@ class JobScraper(BaseScraper):
 
         desc = await self.browser.extract_text_safe(
 
-            ".jobs-description__content, .jobs-box__html-content, #job-details",
+            JobSelectors.DESCRIPTION_CONTENT,
 
             default="",
 
@@ -601,4 +591,5 @@ class JobScraper(BaseScraper):
         desc = desc.strip()
 
         return desc if desc else None
+
 

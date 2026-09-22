@@ -13,9 +13,10 @@ from linkedin_scraper.parsers.search import parse_employee_search_card
 from linkedin_scraper.search.ports import EmployeeSearchPort
 from linkedin_scraper.search.queries import EmployeeSearchQuery
 from linkedin_scraper.search.results import EmployeeSearchResult, SearchPage
+from linkedin_scraper.selectors import SearchCards
 
-CARD_SELECTOR = 'a[href*="/in/"]'
-URL_MARKERS = ("/in/",)
+CARD_SELECTOR = SearchCards.EMPLOYEE_CARD
+URL_MARKERS = SearchCards.EMPLOYEE_URL_MARKERS
 ENTITY_LABEL = 'employee'
 
 

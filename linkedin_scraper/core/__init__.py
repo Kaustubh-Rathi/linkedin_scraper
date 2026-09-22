@@ -28,8 +28,9 @@ from .page_actions import (
     scroll_to_bottom,
     scroll_to_half,
     wait_for_element_smart,
+    wait_for_section_or_main,
 )
-from .rate_limit import detect_rate_limit
+from .rate_limit import RequestThrottler, detect_rate_limit, get_default_throttler
 
 __all__ = [
     # Browser & Ports
@@ -56,7 +57,10 @@ __all__ = [
     'RequiredFieldExtractionError',
     # Utils
     'detect_rate_limit',
+    'RequestThrottler',
+    'get_default_throttler',
     'wait_for_element_smart',
+    'wait_for_section_or_main',
     'extract_text_safe',
     'scroll_to_bottom',
     'scroll_to_half',

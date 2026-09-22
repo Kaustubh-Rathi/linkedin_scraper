@@ -27,6 +27,10 @@ from linkedin_scraper.core.exceptions import (
     NetworkError,
 )
 from linkedin_scraper.models import Experience
+from linkedin_scraper.parsers.person import (
+    map_interest_tab_to_category,
+    parse_contact_dialog_heading_and_links,
+)
 from linkedin_scraper.ports.browser import BrowserPort, ElementPort
 from linkedin_scraper.scrapers.person.contacts import ContactsExtractor
 from linkedin_scraper.scrapers.person.education import EducationExtractor
@@ -375,13 +379,13 @@ async def test_contacts_extractor_dialog_fallback_to_plain_text():
 
 @pytest.mark.unit
 def test_contacts_plain_contact_value_helper():
-    """Test ContactsExtractor.plain_contact_value removes matching heading."""
+    """Plain contact text retains its value via the pure contact parser."""
     text = "Email\nuser@example.com\n"
-    res = ContactsExtractor.plain_contact_value(text, "Email")
-    assert res == "user@example.com"
+    res = parse_contact_dialog_heading_and_links("Email", [], text)
+    assert len(res) == 1 and res[0].value == "user@example.com"
 
-    empty_res = ContactsExtractor.plain_contact_value("Email", "Email")
-    assert empty_res is None
+    empty_res = parse_contact_dialog_heading_and_links("Email", [], "Email")
+    assert empty_res == []
 
 
 # ===========================================================================
@@ -642,11 +646,11 @@ async def test_interests_extractor_subpage_branches():
     assert interests == []
 
     # Test static method
-    assert InterestsExtractor._map_interest_tab_to_category("Top Companies") == "company"
-    assert InterestsExtractor._map_interest_tab_to_category("Top Voices") == "influencer"
-    assert InterestsExtractor._map_interest_tab_to_category("Schools") == "school"
-    assert InterestsExtractor._map_interest_tab_to_category("Newsletters") == "newsletter"
-    assert InterestsExtractor._map_interest_tab_to_category("Groups") == "group"
+    assert map_interest_tab_to_category("Top Companies") == "company"
+    assert map_interest_tab_to_category("Top Voices") == "influencer"
+    assert map_interest_tab_to_category("Schools") == "school"
+    assert map_interest_tab_to_category("Newsletters") == "newsletter"
+    assert map_interest_tab_to_category("Groups") == "group"
 
 
 @pytest.mark.unit
@@ -659,4 +663,5 @@ async def test_contacts_extractor_exception_branch():
     extractor = ContactsExtractor(browser)
     contacts = await extractor.get_contacts("https://www.linkedin.com/in/user/")
     assert contacts == []
+
 

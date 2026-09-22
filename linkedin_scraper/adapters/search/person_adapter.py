@@ -13,9 +13,10 @@ from linkedin_scraper.parsers.search import parse_person_search_card
 from linkedin_scraper.search.ports import PersonSearchPort
 from linkedin_scraper.search.queries import PersonSearchQuery
 from linkedin_scraper.search.results import PersonSearchResult, SearchPage
+from linkedin_scraper.selectors import SearchCards
 
-CARD_SELECTOR = 'a[href*="/in/"]'
-URL_MARKERS = ("/in/",)
+CARD_SELECTOR = SearchCards.PERSON_CARD
+URL_MARKERS = SearchCards.PERSON_URL_MARKERS
 ENTITY_LABEL = 'person'
 
 PERSON_CARDS_JS = """() => {

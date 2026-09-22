@@ -13,9 +13,10 @@ from linkedin_scraper.parsers.search import parse_post_search_card
 from linkedin_scraper.search.ports import PostSearchPort
 from linkedin_scraper.search.queries import PostSearchQuery
 from linkedin_scraper.search.results import PostSearchResult, SearchPage
+from linkedin_scraper.selectors import SearchCards
 
-CARD_SELECTOR = 'a[href*="/feed/update/"], a[href*="/posts/"]'
-URL_MARKERS = ("/feed/update/", "/posts/")
+CARD_SELECTOR = SearchCards.POST_CARD
+URL_MARKERS = SearchCards.POST_URL_MARKERS
 ENTITY_LABEL = 'post'
 
 

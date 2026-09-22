@@ -439,6 +439,65 @@ def location_from_header_lines(text: str, name: str) -> str | None:
     return header[-1]
 
 
+def parse_headline(main_text: str | None, name: str | None) -> str | None:
+    """Parse the profile headline from the top-card header lines.
+
+    The headline is the first header line after the name that is not a
+    pronoun annotation, a connection badge, or the location itself.
+    """
+    if not main_text or not name:
+        return None
+    lines = [line.strip() for line in main_text.splitlines() if line.strip()]
+    location = location_from_header_lines(main_text, name)
+    past_name = False
+    for line in lines:
+        if not past_name:
+            if line == name:
+                past_name = True
+            continue
+        lower = line.lower()
+        if "contact info" in lower or "contact-info" in lower:
+            break
+        if (
+            lower.startswith("contact")
+            or "follower" in lower
+            or "connection" in lower
+        ):
+            break
+        if line in {"·", "•"}:
+            continue
+        if (
+            "/" in line
+            and len(line) <= 20
+            and any(p in line for p in ("Him", "Her", "Them"))
+        ):
+            continue
+        if line == location or (location and line in location):
+            continue
+        if looks_like_date_line(line):
+            continue
+        return line
+    return None
+
+
+def parse_skill_name(span_texts: Sequence[str]) -> str | None:
+    """Parse a skill name from a skill card's span texts (pure function)."""
+    for text in span_texts:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            continue
+        lower = cleaned.lower()
+        # Skip endorsement metadata and UI chrome
+        if lower.startswith("endorsed by") or "endorsement" in lower:
+            continue
+        if "show all" in lower or "see all" in lower or lower == "skills":
+            continue
+        if looks_like_date_line(cleaned):
+            continue
+        return cleaned
+    return None
+
+
 def parse_name_and_location(
     h1_text: str | None, h2_texts: Sequence[str], main_text: str | None
 ) -> tuple[str | None, str | None]:
@@ -632,14 +691,6 @@ def parse_contact_dialog_heading_and_links(
     return contacts
 
 
-# Direct canonical exports
-parse_experiences = parse_experience_lines
-parse_educations = parse_education_lines
-parse_accomplishments = parse_accomplishment_item
-parse_interests = parse_interest_item
-parse_contacts = parse_contact_dialog_heading_and_links
-parse_person_profile = parse_name_and_location
-
 # Re-export pure link/contact helpers
 __all__ = [
     "clean_lines",
@@ -655,6 +706,8 @@ __all__ = [
     "parse_education_lines",
     "parse_educations_text",
     "location_from_header_lines",
+    "parse_headline",
+    "parse_skill_name",
     "parse_name_and_location",
     "parse_open_to_work",
     "parse_about_section",
@@ -662,12 +715,6 @@ __all__ = [
     "map_interest_tab_to_category",
     "parse_interest_item",
     "parse_contact_dialog_heading_and_links",
-    "parse_experiences",
-    "parse_educations",
-    "parse_accomplishments",
-    "parse_interests",
-    "parse_contacts",
-    "parse_person_profile",
     "classify_link",
     "contact_type_from_heading",
     "merge_contacts",

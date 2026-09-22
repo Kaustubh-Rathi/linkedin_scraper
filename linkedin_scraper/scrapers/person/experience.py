@@ -35,11 +35,33 @@ class ExperienceExtractor(SectionExtractor):
             )
             return []
 
-    async def _fetch_experiences_from_details(self, base_url: str) -> list[Experience]:
+    async def get_volunteer_experiences(self, base_url: str) -> list[Experience]:
+        """Extract volunteer experience from the details/volunteering-experiences page."""
+        try:
+            return await self._fetch_experiences_from_details(
+                base_url,
+                detail_path="details/volunteering-experiences/",
+                heading="Volunteer",
+            )
+        except (AuthenticationError, RateLimitError):
+            raise
+        except Exception as e:
+            logger.warning(
+                "Error getting volunteer experiences: %s. The section may not be available or the page structure has changed.",
+                e,
+            )
+            return []
+
+    async def _fetch_experiences_from_details(
+        self,
+        base_url: str,
+        detail_path: str = "details/experience/",
+        heading: str = "Experience",
+    ) -> list[Experience]:
         """Scrape complete experience cards, with text as a fallback."""
-        exp_url = profile_detail_url(base_url, "details/experience/")
-        await self.browser.goto(exp_url, wait_until="domcontentloaded")
-        await self._wait_for_detail_section("Experience")
+        exp_url = profile_detail_url(base_url, detail_path)
+        await self._goto(exp_url)
+        await self._wait_for_detail_section(heading)
         await scroll_to_bottom(self.browser, pause_time=0.3, max_scrolls=4)
 
         experiences = await self._parse_experience_cards()
@@ -56,7 +78,7 @@ class ExperienceExtractor(SectionExtractor):
                 )
                 return self._dedupe_experiences(experiences)
 
-        await self.browser.goto(base_url, wait_until="domcontentloaded")
+        await self._goto(base_url)
         experiences = await self._parse_experience_cards()
         return self._dedupe_experiences(experiences)
 

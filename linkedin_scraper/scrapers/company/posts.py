@@ -33,8 +33,9 @@ class CompanyPostsScraper(BaseScraper):
         callback: ProgressCallback | None = None,
         *,
         page: BrowserPort | Any = None,
+    throttler: Any | None = None,
     ):
-        super().__init__(page_or_browser, callback, page=page)
+        super().__init__(page_or_browser, callback, page=page, throttler=throttler)
 
     async def scrape(self, company_url: str, limit: int = 10) -> list[Post]:
         logger.info(f"Starting company posts scraping: {company_url}")

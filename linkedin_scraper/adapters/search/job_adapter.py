@@ -13,9 +13,10 @@ from linkedin_scraper.parsers.search import parse_job_search_card
 from linkedin_scraper.search.ports import JobSearchPort
 from linkedin_scraper.search.queries import JobSearchQuery
 from linkedin_scraper.search.results import JobSearchResult, SearchPage
+from linkedin_scraper.selectors import SearchCards
 
-CARD_SELECTOR = 'a[href*="/jobs/view/"]'
-URL_MARKERS = ("/jobs/view/",)
+CARD_SELECTOR = SearchCards.JOB_CARD
+URL_MARKERS = SearchCards.JOB_URL_MARKERS
 ENTITY_LABEL = 'job'
 
 JOB_CARDS_JS = """() => {

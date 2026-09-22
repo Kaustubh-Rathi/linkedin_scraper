@@ -57,3 +57,7 @@ dist-basic/
 .audit/
 /coverage.json
 kaustubh_profile.json
+
+# Local test-run capture files
+test_run_*.txt
+pytest_*.txt

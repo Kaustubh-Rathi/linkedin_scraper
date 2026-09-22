@@ -13,9 +13,10 @@ from linkedin_scraper.parsers.search import parse_company_search_card
 from linkedin_scraper.search.ports import CompanySearchPort
 from linkedin_scraper.search.queries import CompanySearchQuery
 from linkedin_scraper.search.results import CompanySearchResult, SearchPage
+from linkedin_scraper.selectors import SearchCards
 
-CARD_SELECTOR = 'a[href*="/company/"]'
-URL_MARKERS = ("/company/",)
+CARD_SELECTOR = SearchCards.COMPANY_CARD
+URL_MARKERS = SearchCards.COMPANY_URL_MARKERS
 ENTITY_LABEL = 'company'
 
 COMPANY_CARDS_JS = """() => {

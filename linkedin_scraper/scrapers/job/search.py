@@ -39,6 +39,7 @@ class JobSearchScraper(BaseScraper):
         callback: ProgressCallback | None = None,
         *,
         page: BrowserPort | Any = None,
+    throttler: Any | None = None,
     ):
         """
         Initialize job search scraper.
@@ -48,8 +49,10 @@ class JobSearchScraper(BaseScraper):
             callback: Optional progress callback
             page: Keyword argument alias for page_or_browser (backward compatibility)
         """
-        super().__init__(page_or_browser, callback, page=page)
-        self._adapter = LinkedInJobSearchAdapter(browser=self.browser)
+        super().__init__(page_or_browser, callback, page=page, throttler=throttler)
+        self._adapter = LinkedInJobSearchAdapter(
+            browser=self.browser, throttler=self._throttler
+        )
 
     async def search(
         self,

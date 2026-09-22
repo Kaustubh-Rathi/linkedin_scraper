@@ -37,7 +37,7 @@ class EducationExtractor(SectionExtractor):
     async def _fetch_educations_from_details(self, base_url: str) -> list[Education]:
         """Scrape complete education cards, with text as a fallback."""
         edu_url = profile_detail_url(base_url, "details/education/")
-        await self.browser.goto(edu_url, wait_until="domcontentloaded")
+        await self._goto(edu_url)
         await self._wait_for_detail_section("Education")
         await scroll_to_bottom(self.browser, pause_time=0.3, max_scrolls=3)
 
@@ -55,7 +55,7 @@ class EducationExtractor(SectionExtractor):
                 )
                 return self._dedupe_educations(educations)
 
-        await self.browser.goto(base_url, wait_until="domcontentloaded")
+        await self._goto(base_url)
         educations = await self._parse_education_cards()
         return self._dedupe_educations(educations)
 

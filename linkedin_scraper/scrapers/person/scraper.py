@@ -12,7 +12,7 @@ from ...core.exceptions import (
     RequiredFieldExtractionError,
     ScrapingError,
 )
-from ...models import Accomplishment, Interest, Person
+from ...models import Accomplishment, Experience, Interest, Person
 from ...ports.browser import BrowserPort
 from ..base import BaseScraper
 from .accomplishments import AccomplishmentsExtractor
@@ -22,6 +22,7 @@ from .experience import ExperienceExtractor
 from .interests import InterestsExtractor
 from .links import merge_contacts
 from .profile import ProfileExtractor
+from .skills import SkillsExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class PersonScraper(BaseScraper):
         callback: ProgressCallback | None = None,
         *,
         page: BrowserPort | Any = None,
+        throttler: Any | None = None,
     ):
         """
         Initialize person scraper.
@@ -47,14 +49,16 @@ class PersonScraper(BaseScraper):
             page_or_browser: BrowserPort instance or legacy page object
             callback: Progress callback
             page: Keyword argument alias for page_or_browser (backward compatibility)
+            throttler: Request pacing strategy (defaults to the shared throttler)
         """
-        super().__init__(page_or_browser, callback, page=page)
-        self._profile = ProfileExtractor(self.browser)
-        self._experience = ExperienceExtractor(self.browser)
-        self._education = EducationExtractor(self.browser)
-        self._interests = InterestsExtractor(self.browser)
-        self._accomplishments = AccomplishmentsExtractor(self.browser)
-        self._contacts = ContactsExtractor(self.browser)
+        super().__init__(page_or_browser, callback, page=page, throttler=throttler)
+        self._profile = ProfileExtractor(self.browser, throttler=self._throttler)
+        self._experience = ExperienceExtractor(self.browser, throttler=self._throttler)
+        self._education = EducationExtractor(self.browser, throttler=self._throttler)
+        self._skills = SkillsExtractor(self.browser, throttler=self._throttler)
+        self._interests = InterestsExtractor(self.browser, throttler=self._throttler)
+        self._accomplishments = AccomplishmentsExtractor(self.browser, throttler=self._throttler)
+        self._contacts = ContactsExtractor(self.browser, throttler=self._throttler)
 
     async def scrape(
         self,
@@ -62,6 +66,8 @@ class PersonScraper(BaseScraper):
         *,
         include_interests: bool = True,
         include_accomplishments: bool = True,
+        include_skills: bool = True,
+        include_volunteer: bool = True,
     ) -> Person:
         """
         Scrape a LinkedIn person profile.
@@ -71,6 +77,8 @@ class PersonScraper(BaseScraper):
             include_interests: Also scrape interests tabs (enabled by default)
             include_accomplishments: Also scrape certifications/honors/etc.
                 (enabled by default for backward compatibility)
+            include_skills: Also scrape the skills section (enabled by default)
+            include_volunteer: Also scrape volunteer experience (enabled by default)
 
         Returns:
             Person object with scraped data
@@ -97,6 +105,7 @@ class PersonScraper(BaseScraper):
                 raise RequiredFieldExtractionError(field_name="name", entity_url=linkedin_url)
             await self.callback.on_progress(f"Got name: {name}", 20)
 
+            headline = await self._profile.get_headline(name)
             open_to_work = await self._profile.check_open_to_work()
             about = await self._profile.get_about()
             await self.callback.on_progress("Got about section", 30)
@@ -109,10 +118,24 @@ class PersonScraper(BaseScraper):
             educations = await self._education.get_educations(linkedin_url)
             await self.callback.on_progress(f"Got {len(educations)} educations", 70)
 
+            skills: list[str] = []
+            if include_skills:
+                skills = await self._skills.get_skills(linkedin_url)
+                await self.callback.on_progress(f"Got {len(skills)} skills", 75)
+
+            volunteer_experiences: list[Experience] = []
+            if include_volunteer:
+                volunteer_experiences = await self._experience.get_volunteer_experiences(
+                    linkedin_url
+                )
+                await self.callback.on_progress(
+                    f"Got {len(volunteer_experiences)} volunteer experiences", 80
+                )
+
             interests: list[Interest] = []
             if include_interests:
                 interests = await self._interests.get_interests(linkedin_url)
-                await self.callback.on_progress(f"Got {len(interests)} interests", 80)
+                await self.callback.on_progress(f"Got {len(interests)} interests", 85)
 
             accomplishments: list[Accomplishment] = []
             if include_accomplishments:
@@ -130,11 +153,14 @@ class PersonScraper(BaseScraper):
             person = Person(
                 linkedin_url=linkedin_url,
                 name=name,
+                headline=headline,
                 location=location,
                 about=about,
                 open_to_work=open_to_work,
                 experiences=experiences,
                 educations=educations,
+                skills=skills,
+                volunteer_experiences=volunteer_experiences,
                 interests=interests,
                 accomplishments=accomplishments,
                 contacts=contacts,

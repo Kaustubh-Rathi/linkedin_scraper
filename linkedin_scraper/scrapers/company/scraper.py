@@ -22,6 +22,7 @@ from ...parsers.company import (
     parse_company_overview,
 )
 from ...ports.browser import BrowserPort
+from ...selectors import Company as CompanySelectors
 from ..base import BaseScraper
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class CompanyScraper(BaseScraper):
         callback: ProgressCallback | None = None,
         *,
         page: BrowserPort | Any = None,
+        throttler: Any | None = None,
     ):
         """
         Initialize company scraper.
@@ -61,7 +63,7 @@ class CompanyScraper(BaseScraper):
             callback: Optional progress callback
             page: Keyword argument alias for page_or_browser (for backward compatibility)
         """
-        super().__init__(page_or_browser, callback, page=page)
+        super().__init__(page_or_browser, callback, page=page, throttler=throttler)
 
     async def scrape(self, linkedin_url: str) -> Company:
         """
@@ -139,7 +141,9 @@ class CompanyScraper(BaseScraper):
         if not raw_name:
             logger.debug("Company h1 heading not found; falling back to candidate h2 headings")
             try:
-                for h2 in await self.browser.query_selector_all("main h2, h2"):
+                for h2 in await self.browser.query_selector_all(
+                    CompanySelectors.NAME_HEADINGS
+                ):
                     txt = (await h2.inner_text() or "").strip()
                     if (
                         txt
@@ -303,11 +307,13 @@ class CompanyScraper(BaseScraper):
 
         # 2. Legacy dt/dd fallback if SDUI extraction yielded nothing
         if not dt_dd_pairs:
-            dl_elements = await self.browser.query_selector_all("dl")
+            dl_elements = await self.browser.query_selector_all(
+                CompanySelectors.DEFINITION_LIST
+            )
             if dl_elements:
                 for dl in dl_elements:
-                    dts = await dl.query_selector_all("dt")
-                    dds = await dl.query_selector_all("dd")
+                    dts = await dl.query_selector_all(CompanySelectors.DEFINITION_TERM)
+                    dds = await dl.query_selector_all(CompanySelectors.DEFINITION_VALUE)
                     if len(dts) == len(dds):
                         for dt, dd in zip(dts, dds):
                             label = await dt.inner_text()
@@ -315,8 +321,12 @@ class CompanyScraper(BaseScraper):
                             if label:
                                 dt_dd_pairs.append((label, val))
             if not dt_dd_pairs:
-                dt_elements = await self.browser.query_selector_all("dt")
-                dd_elements = await self.browser.query_selector_all("dd")
+                dt_elements = await self.browser.query_selector_all(
+                    CompanySelectors.DEFINITION_TERM
+                )
+                dd_elements = await self.browser.query_selector_all(
+                    CompanySelectors.DEFINITION_VALUE
+                )
                 if dt_elements and len(dt_elements) == len(dd_elements):
                     for dt, dd in zip(dt_elements, dd_elements):
                         label = await dt.inner_text()
@@ -326,12 +336,12 @@ class CompanyScraper(BaseScraper):
 
         # 3. Info items (legacy top-card list, present on older pages)
         info_items = await self.browser.query_selector_all(
-            ".org-top-card-summary-info-list__info-item"
+            CompanySelectors.OVERVIEW_INFO_ITEM
         )
         info_texts = [await item.inner_text() for item in info_items]
 
         # 4. Links (for website detection)
-        links = await self.browser.query_selector_all("a")
+        links = await self.browser.query_selector_all(CompanySelectors.ALL_ANCHORS)
         links_data: list[tuple[str, str]] = []
         for link in links:
             href = await link.get_attribute("href")

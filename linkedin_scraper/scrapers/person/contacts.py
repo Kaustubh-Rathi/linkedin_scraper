@@ -16,6 +16,7 @@ from ...parsers.person_links import (
     unwrap_href,
 )
 from ...ports.browser import ElementPort
+from ...selectors import PersonProfile as PersonSelectors
 from ._extractor import SectionExtractor
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class ContactsExtractor(SectionExtractor):
         """Collect Featured/custom outbound links from the current profile page."""
         contacts: list[Contact] = []
         try:
-            links = await self.browser.query_selector_all("main a[href]")
+            links = await self.browser.query_selector_all(PersonSelectors.MAIN_ANCHORS)
             seen = set()
             for link in links:
                 try:
@@ -80,27 +81,33 @@ class ContactsExtractor(SectionExtractor):
         contacts: list[Contact] = []
         try:
             contact_url = profile_detail_url(base_url, "overlay/contact-info/")
-            await self.browser.goto(contact_url, wait_until="domcontentloaded")
+            await self._goto(contact_url)
             try:
-                await self.browser.wait_for_selector("main, [role='dialog']", timeout=5000)
+                await self.browser.wait_for_selector(
+                    PersonSelectors.CONTACT_DIALOG_WAIT, timeout=5000
+                )
             except Exception as exc:
                 logger.debug("Contact info dialog wait timed out: %s", exc)
 
-            dialogs = await self.browser.query_selector_all('dialog, [role="dialog"]')
+            dialogs = await self.browser.query_selector_all(
+                PersonSelectors.CONTACT_DIALOG
+            )
             if dialogs:
                 dialog = dialogs[0]
                 sections = await dialog.query_selector_all("section")
                 if not sections:
                     sections = [dialog]
                 for section in sections:
-                    headings = await section.query_selector_all("h3")
+                    headings = await section.query_selector_all(
+                        PersonSelectors.CONTACT_HEADING
+                    )
                     if not headings:
                         continue
                     heading_text = ((await headings[0].text_content()) or "").strip()
                     contact_type = contact_type_from_heading(heading_text)
                     if not contact_type:
                         continue
-                    links = await section.query_selector_all("a[href]")
+                    links = await section.query_selector_all(PersonSelectors.CONTACT_LINK)
                     if links:
                         link_items = []
                         for link in links:
@@ -132,19 +139,11 @@ class ContactsExtractor(SectionExtractor):
     @staticmethod
     async def _contact_label(container: ElementPort) -> str | None:
         """Return labels such as Mobile, Personal, or Work."""
-        elements = await container.query_selector_all("span, generic")
+        elements = await container.query_selector_all(
+            PersonSelectors.CONTACT_LABEL_SPANS
+        )
         for element in elements:
             text = ((await element.text_content()) or "").strip()
             if text.startswith("(") and text.endswith(")"):
                 return text[1:-1].strip() or None
         return None
-
-    @staticmethod
-    def plain_contact_value(text: str, heading: str) -> str | None:
-        """Remove a contact heading while retaining a non-linked value."""
-        lines = [
-            line.strip()
-            for line in text.splitlines()
-            if line.strip() and line.strip().lower() != heading.lower()
-        ]
-        return "\n".join(lines).strip() or None

@@ -11,17 +11,16 @@ from ..core.exceptions import AuthenticationError, RateLimitError
 from ..core.page_actions import (
     extract_text_safe,
     scroll_to_bottom,
+    wait_for_section_or_main,
 )
-from ..core.rate_limit import detect_rate_limit
+from ..core.rate_limit import RequestThrottler, detect_rate_limit, get_default_throttler
 from ..ports.browser import BrowserPort, ElementPort
+from ..selectors import PersonProfile as PersonSelectors
 
 logger = logging.getLogger(__name__)
 
-# Shared card selector for LinkedIn profile detail lists.
-PROFILE_COMPONENT_ITEMS = (
-    'main [data-view-name="profile-component-entity"], '
-    "main .pvs-list__paged-list-item"
-)
+# Backward-compatible alias: canonical definition lives in selectors.py.
+PROFILE_COMPONENT_ITEMS = PersonSelectors.COMPONENT_ITEMS
 
 # The audit engine reserves raw-page unwrapping for core/adapters modules; the
 # scraper layer accesses it indirectly via getattr using this attribute name.
@@ -37,12 +36,17 @@ class BaseScraper:
         callback: Optional[ProgressCallback] = None,
         *,
         page: Union[BrowserPort, Any] = None,
+        throttler: Optional[RequestThrottler] = None,
     ):
         """
         Initialize base scraper.
 
         Accepts either a BrowserPort adapter, a BrowserManager, or a raw automation page.
         Supports both positional and keyword argument `page` for backward compatibility.
+
+        Args:
+            throttler: Request pacing strategy. Defaults to the process-wide
+                shared throttler so every scraper issues one request at a time.
         """
         target = page if page is not None else page_or_browser
         if target is None:
@@ -68,6 +72,7 @@ class BaseScraper:
             self.page = target
 
         self.callback = callback or SilentCallback()
+        self._throttler = throttler or get_default_throttler()
 
     async def ensure_logged_in(self) -> None:
         """
@@ -126,7 +131,8 @@ class BaseScraper:
             timeout: Timeout in milliseconds (default: 60000 = 60s)
         """
         logger.info("Navigating to: %s", url)
-        await self.page.goto(url, wait_until=wait_until, timeout=timeout)
+        async with self._throttler:
+            await self.page.goto(url, wait_until=wait_until, timeout=timeout)
         await self.check_rate_limit()
 
     async def get_attribute_safe(
@@ -185,10 +191,4 @@ class BaseScraper:
 
     async def wait_for_detail_section(self, heading: str) -> None:
         """Wait for a details page section, falling back to bare main."""
-        try:
-            await self.browser.wait_for_selector(
-                f'main:has-text("{heading}")', timeout=5000
-            )
-        except Exception as exc:
-            logger.debug("Detail section '%s' wait timed out, falling back to 'main': %s", heading, exc)
-            await self.browser.wait_for_selector("main", timeout=5000)
+        await wait_for_section_or_main(self.browser, heading)

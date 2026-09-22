@@ -5,6 +5,22 @@ import pytest
 from pathlib import Path
 from linkedin_scraper import BrowserManager
 from linkedin_scraper.callbacks import SilentCallback
+from linkedin_scraper.core.rate_limit import get_default_throttler
+
+
+@pytest.fixture(autouse=True)
+def _disable_throttle_delays():
+    """Zero out the shared request throttler so offline tests run instantly.
+
+    Production code still throttles (one request at a time, min interval);
+    tests must not sleep between navigations.
+    """
+    throttler = get_default_throttler()
+    saved_interval, saved_jitter = throttler.min_interval, throttler.jitter
+    throttler.min_interval = 0.0
+    throttler.jitter = 0.0
+    yield
+    throttler.min_interval, throttler.jitter = saved_interval, saved_jitter
 
 
 # Session file path

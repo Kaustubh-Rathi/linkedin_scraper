@@ -9,6 +9,7 @@ from typing import Any, Optional, Tuple, Union
 from dotenv import load_dotenv
 
 from ..ports.browser import BrowserPort
+from ..selectors import Auth as AuthSelectors
 from .exceptions import AuthenticationError
 from .rate_limit import detect_rate_limit
 
@@ -76,7 +77,9 @@ async def login_with_credentials(
         await detect_rate_limit(page)
 
         try:
-            await page.wait_for_selector("#username", timeout=timeout, state="visible")
+            await page.wait_for_selector(
+                AuthSelectors.LOGIN_USERNAME, timeout=timeout, state="visible"
+            )
         except Exception as exc:
             if isinstance(exc, AuthenticationError):
                 raise
@@ -86,11 +89,11 @@ async def login_with_credentials(
                 "or the site is experiencing issues."
             ) from exc
 
-        await page.fill("#username", email)
-        await page.fill("#password", password)
+        await page.fill(AuthSelectors.LOGIN_USERNAME, email)
+        await page.fill(AuthSelectors.LOGIN_PASSWORD, password)
         logger.debug("Credentials entered successfully")
 
-        await page.click('button[type="submit"]')
+        await page.click(AuthSelectors.LOGIN_SUBMIT)
 
         try:
             if hasattr(page, "wait_for_url"):
@@ -206,15 +209,11 @@ async def is_logged_in(page: Union[BrowserPort, Any]) -> bool:
             return False
 
         has_nav_elements = False
-        nav_selector = (
-            '.global-nav__primary-link, [data-control-name="nav.settings"], '
-            'nav a[href*="/feed"], .global-nav, #global-nav, nav a[href*="/mynetwork"]'
-        )
         if hasattr(page, "query_selector_all"):
-            nav_items = await page.query_selector_all(nav_selector)
+            nav_items = await page.query_selector_all(AuthSelectors.NAV_MARKERS)
             has_nav_elements = len(nav_items) > 0
         elif hasattr(page, "locator"):
-            loc = page.locator(nav_selector)
+            loc = page.locator(AuthSelectors.NAV_MARKERS)
             count = await loc.count() if hasattr(loc, "count") else 0
             has_nav_elements = count > 0
 

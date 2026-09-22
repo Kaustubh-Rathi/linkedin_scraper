@@ -4,6 +4,7 @@ import pytest
 
 from linkedin_scraper.core.exceptions import AuthenticationError, RateLimitError, ScrapingError
 from linkedin_scraper.models import Education, Experience
+from linkedin_scraper.parsers.person import parse_contact_dialog_heading_and_links
 from linkedin_scraper.scrapers.person.accomplishments import AccomplishmentsExtractor
 from linkedin_scraper.scrapers.person.contacts import ContactsExtractor
 from linkedin_scraper.scrapers.person.education import EducationExtractor
@@ -159,8 +160,8 @@ async def test_accomplishments_extractor_skips_empty():
 @pytest.mark.asyncio
 async def test_contacts_extractor_plain_contact_value():
     text = "Phone\n+1 555-0100 (Mobile)"
-    val = ContactsExtractor.plain_contact_value(text, "Phone")
-    assert val == "+1 555-0100 (Mobile)"
+    val = parse_contact_dialog_heading_and_links("Phone", [], text)
+    assert len(val) == 1 and val[0].value == "+1 555-0100 (Mobile)"
 
 
 @pytest.mark.unit
@@ -302,3 +303,4 @@ async def test_person_scraper_wraps_unexpected_error():
     scraper = PersonScraper(browser)
     with pytest.raises(ScrapingError, match="Failed to scrape person profile"):
         await scraper.scrape("https://www.linkedin.com/in/test-profile/")
+

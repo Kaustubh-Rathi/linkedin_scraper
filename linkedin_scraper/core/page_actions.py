@@ -6,11 +6,34 @@ import logging
 from typing import Any, Literal, Optional, Union
 
 from ..ports.browser import BrowserPort
+from ..selectors import Page as PageSelectors
+from ..selectors import PageActions as PageActionSelectors
 from .exceptions import ElementNotFoundError
 
 logger = logging.getLogger(__name__)
 
 WaitForState = Literal["attached", "detached", "hidden", "visible"]
+
+
+async def wait_for_section_or_main(
+    browser: Union[BrowserPort, Any], heading: str, timeout: float = 5000
+) -> None:
+    """Wait for a detail-page section by heading, falling back to bare ``main``.
+
+    Shared by ``BaseScraper`` and the person ``SectionExtractor`` so the
+    behaviour is defined exactly once (DRY).
+    """
+    try:
+        await browser.wait_for_selector(
+            f'{PageSelectors.MAIN}:has-text("{heading}")', timeout=timeout
+        )
+    except Exception as exc:
+        logger.debug(
+            "Detail section '%s' wait timed out, falling back to 'main': %s",
+            heading,
+            exc,
+        )
+        await browser.wait_for_selector(PageSelectors.MAIN, timeout=timeout)
 
 
 async def _resolve_first_locator(page: Any, selector: str) -> Any:
@@ -126,7 +149,7 @@ async def click_see_more_buttons(
     Click all 'Show more' / 'See more' buttons on the page.
     """
     clicked = 0
-    selector = 'button:has-text("See more"), button:has-text("Show more"), button:has-text("show all")'
+    selector = PageActionSelectors.SEE_MORE_BUTTONS
     for attempt in range(max_attempts):
         try:
             if hasattr(page, "query_selector_all"):
@@ -165,7 +188,7 @@ async def handle_modal_close(page: Union[BrowserPort, Any]) -> bool:
     """
     Close any popup modals that might be blocking content.
     """
-    selector = 'button[aria-label="Dismiss"], button[aria-label="Close"], button.artdeco-modal__dismiss'
+    selector = PageActionSelectors.MODAL_DISMISS
     try:
         if hasattr(page, "query_selector_all"):
             buttons = await page.query_selector_all(selector)

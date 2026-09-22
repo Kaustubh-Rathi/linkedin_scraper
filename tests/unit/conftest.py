@@ -11,6 +11,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import pytest
 
+from linkedin_scraper.core.rate_limit import get_default_throttler
+
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "html"
 
 

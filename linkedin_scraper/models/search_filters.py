@@ -127,6 +127,10 @@ class BaseSearchFilter(BaseModel):
 class PersonSearchFilter(BaseSearchFilter):
     """Filter parameters specific to Person search on LinkedIn."""
     title: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    company: str | None = None
+    school_name: str | None = None
     location: list[str] = Field(default_factory=list)
     current_company: list[str] = Field(default_factory=list)
     past_company: list[str] = Field(default_factory=list)
@@ -150,7 +154,9 @@ class PersonSearchFilter(BaseSearchFilter):
     def _validate_string_lists(cls, v: list[str] | None) -> list[str]:
         return super()._validate_string_lists(v)
 
-    @field_validator("title", mode="before")
+    @field_validator(
+        "title", "first_name", "last_name", "company", "school_name", mode="before"
+    )
     @classmethod
     def _validate_title(cls, v: str | None) -> str | None:
         return super()._validate_title(v)
@@ -169,7 +175,12 @@ class CompanySearchFilter(BaseSearchFilter):
 
 
 class JobSearchFilter(BaseSearchFilter):
-    """Filter parameters specific to Job search on LinkedIn."""
+    """Filter parameters specific to Job search on LinkedIn.
+
+    ``job_functions`` and ``salary_buckets`` accept LinkedIn's own facet codes
+    (``f_F`` and ``f_SB2`` respectively) so every value exposed in the LinkedIn
+    UI can be expressed even when the code catalog changes.
+    """
     location: list[str] = Field(default_factory=list)
     date_posted: DatePosted | None = None
     experience_levels: list[ExperienceLevel] = Field(default_factory=list)
@@ -179,6 +190,10 @@ class JobSearchFilter(BaseSearchFilter):
     industries: list[str] = Field(default_factory=list)
     easy_apply_only: bool = False
     under_ten_applicants: bool = False
+    sort_by: SortBy | None = None
+    distance: int | None = Field(default=None, ge=0)
+    job_functions: list[str] = Field(default_factory=list)
+    salary_buckets: list[str] = Field(default_factory=list)
 
     @field_validator("location", "companies", "industries", mode="before")
     @classmethod
@@ -191,9 +206,10 @@ class PostSearchFilter(BaseSearchFilter):
     date_posted: DatePosted | None = None
     author_company: list[str] = Field(default_factory=list)
     author_industry: list[str] = Field(default_factory=list)
+    content_types: list[str] = Field(default_factory=list)
     sort_by: SortBy = SortBy.RELEVANCE
 
-    @field_validator("author_company", "author_industry", mode="before")
+    @field_validator("author_company", "author_industry", "content_types", mode="before")
     @classmethod
     def _validate_string_lists(cls, v: list[str] | None) -> list[str]:
         return super()._validate_string_lists(v)

@@ -62,11 +62,14 @@ class Person(BaseScraperModel):
 
     linkedin_url: str
     name: Optional[str] = None
+    headline: Optional[str] = None
     location: Optional[str] = None
     about: Optional[str] = None
     open_to_work: bool = False
     experiences: List[Experience] = Field(default_factory=list)
     educations: List[Education] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
+    volunteer_experiences: List[Experience] = Field(default_factory=list)
     interests: List[Interest] = Field(default_factory=list)
     accomplishments: List[Accomplishment] = Field(default_factory=list)
     contacts: List[Contact] = Field(default_factory=list)

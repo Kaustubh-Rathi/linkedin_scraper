@@ -8,6 +8,8 @@ from linkedin_scraper.scrapers.person.links import (
     unwrap_href,
 )
 from linkedin_scraper.parsers.person import (
+    location_from_header_lines,
+    parse_contact_dialog_heading_and_links,
     parse_education_lines,
     parse_educations_text,
     parse_experience_lines,
@@ -223,7 +225,7 @@ def test_plain_contact_fields_are_retained():
     assert contact_type_from_heading("Birthday") == "birthday"
     assert contact_type_from_heading("Address") == "address"
     assert (
-        ContactsExtractor.plain_contact_value("Phone\n+1 555 0100", "Phone")
+        parse_contact_dialog_heading_and_links("Phone", [], "Phone\n+1 555 0100")[0].value
         == "+1 555 0100"
     )
 
@@ -242,7 +244,7 @@ People who follow Reid also follow
 Demis Hassabis
 Nobel Laureate | Co-Founder & CEO, Google DeepMind
 """
-    loc = ProfileExtractor.location_from_header_lines(text, "Reid Hoffman")
+    loc = location_from_header_lines(text, "Reid Hoffman")
     assert loc == "United States"
 
 
@@ -254,5 +256,6 @@ London, England, United Kingdom
 Contact info
 500+ connections
 """
-    loc = ProfileExtractor.location_from_header_lines(text, "Ada Lovelace")
+    loc = location_from_header_lines(text, "Ada Lovelace")
     assert loc == "London, England, United Kingdom"
+

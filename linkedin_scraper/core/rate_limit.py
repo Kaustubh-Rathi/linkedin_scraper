@@ -1,12 +1,97 @@
-"""Rate limit and security checkpoint detection."""
+"""Rate limit/security checkpoint detection, plus proactive request throttling.
 
+Detection (``detect_rate_limit``) reacts to LinkedIn's signals; throttling
+(``RequestThrottler``) is proactive: it serializes page requests (one at a
+time) and enforces a minimum interval between them so sessions stay well
+below LinkedIn's automation thresholds.
+"""
+
+import asyncio
 import logging
-from typing import Any, Union
+import os
+import random
+import time
+from typing import Any, Optional, Union
 
 from ..ports.browser import BrowserPort
+from ..selectors import RateLimit as RateLimitSelectors
 from .exceptions import RateLimitError
 
 logger = logging.getLogger(__name__)
+
+
+class RequestThrottler:
+    """Serialize and pace outbound page requests.
+
+    Guarantees:
+      * **one request at a time** — an async lock serializes callers;
+      * **minimum spacing** — at least ``min_interval`` seconds (+ up to
+        ``jitter`` seconds of random delay) pass between consecutive requests;
+      * **optional budget** — when ``max_requests_per_hour`` is set, exceeding
+        it raises :class:`RateLimitError` instead of hammering LinkedIn.
+
+    The default instance's interval is configurable via the
+    ``LINKEDIN_MIN_REQUEST_INTERVAL`` environment variable (seconds).
+    """
+
+    def __init__(
+        self,
+        min_interval: float = 2.0,
+        jitter: float = 1.0,
+        max_requests_per_hour: Optional[int] = None,
+    ) -> None:
+        self.min_interval = max(0.0, float(min_interval))
+        self.jitter = max(0.0, float(jitter))
+        self.max_requests_per_hour = max_requests_per_hour
+        self._lock = asyncio.Lock()
+        self._last_request_at: Optional[float] = None
+        self._request_times: list[float] = []
+
+    async def acquire(self) -> None:
+        """Wait until it is safe to issue the next request, then reserve the slot."""
+        async with self._lock:
+            now = time.monotonic()
+            if self._last_request_at is not None and self.min_interval > 0:
+                wait = self.min_interval - (now - self._last_request_at)
+                if wait > 0:
+                    wait += random.uniform(0.0, self.jitter)
+                    logger.debug("Throttling next request for %.2fs", wait)
+                    await asyncio.sleep(wait)
+
+            if self.max_requests_per_hour is not None:
+                cutoff = time.monotonic() - 3600
+                self._request_times = [t for t in self._request_times if t > cutoff]
+                if len(self._request_times) >= self.max_requests_per_hour:
+                    raise RateLimitError(
+                        "Local hourly request budget exhausted "
+                        f"({self.max_requests_per_hour}/h).",
+                        suggested_wait_time=3600,
+                    )
+
+            self._last_request_at = time.monotonic()
+            self._request_times.append(self._last_request_at)
+
+    async def __aenter__(self) -> "RequestThrottler":
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        return None
+
+
+_default_throttler: Optional[RequestThrottler] = None
+
+
+def get_default_throttler() -> RequestThrottler:
+    """Return the process-wide shared throttler (one request at a time globally)."""
+    global _default_throttler
+    if _default_throttler is None:
+        try:
+            interval = float(os.getenv("LINKEDIN_MIN_REQUEST_INTERVAL", "2.0"))
+        except ValueError:
+            interval = 2.0
+        _default_throttler = RequestThrottler(min_interval=interval)
+    return _default_throttler
 
 
 async def detect_rate_limit(page: Union[BrowserPort, Any]) -> None:
@@ -38,9 +123,7 @@ async def detect_rate_limit(page: Union[BrowserPort, Any]) -> None:
     # 2. CAPTCHA iframe / challenge element detection
     try:
         if hasattr(page, "locator"):
-            loc = page.locator(
-                'iframe[title*="captcha" i], iframe[src*="captcha" i], div[class*="captcha" i]'
-            )
+            loc = page.locator(RateLimitSelectors.CAPTCHA)
             if hasattr(loc, "__await__"):
                 loc = await loc
             count = 0
@@ -54,9 +137,7 @@ async def detect_rate_limit(page: Union[BrowserPort, Any]) -> None:
                     suggested_wait_time=3600,
                 )
         elif hasattr(page, "query_selector_all"):
-            captcha_elements = await page.query_selector_all(
-                'iframe[title*="captcha" i], iframe[src*="captcha" i], div[class*="captcha" i]'
-            )
+            captcha_elements = await page.query_selector_all(RateLimitSelectors.CAPTCHA)
             for el in captcha_elements:
                 src = (await el.get_attribute("src") or "") if hasattr(el, "get_attribute") else ""
                 title = (await el.get_attribute("title") or "") if hasattr(el, "get_attribute") else ""
@@ -78,14 +159,7 @@ async def detect_rate_limit(page: Union[BrowserPort, Any]) -> None:
     try:
         rate_limit_text: Union[str, Any, None] = None
         # LinkedIn rate-limit messages typically appear in specific containers
-        rate_limit_selectors = [
-            '[data-testid="rate-limit-banner"]',
-            '.rate-limit-message',
-            '.artdeco-toast-item--error',
-            '.artdeco-banner--error',
-            '[class*="rate-limit"]',
-            '[class*="rateLimit"]',
-        ]
+        rate_limit_selectors = list(RateLimitSelectors.BANNERS)
         for selector in rate_limit_selectors:
             try:
                 if hasattr(page, "locator"):

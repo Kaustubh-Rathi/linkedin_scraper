@@ -98,6 +98,12 @@ SORT_BY_MAP: dict[SortBy, str] = {
     SortBy.DATE: "date_posted",
 }
 
+#: Job search uses its own sort codes (`sortBy=R` relevance, `sortBy=DD` date).
+JOB_SORT_BY_MAP: dict[SortBy, str] = {
+    SortBy.RELEVANCE: "R",
+    SortBy.DATE: "DD",
+}
+
 
 def _format_facet_value(values: list[str] | list[Any]) -> str:
     """Format list of filter values into LinkedIn facet string: e.g. ["1", "2"] -> '["1","2"]'."""
@@ -142,6 +148,14 @@ class LinkedInSearchUrlBuilder:
             facets.append(f"serviceCategory=>{_format_facet_value(f.service_category)}")
         if f.title:
             params["title"] = f.title
+        if f.first_name:
+            params["firstName"] = f.first_name
+        if f.last_name:
+            params["lastName"] = f.last_name
+        if f.company:
+            params["company"] = f.company
+        if f.school_name:
+            params["school"] = f.school_name
 
         if facets:
             params["facet"] = quote(",".join(facets), safe="")
@@ -231,6 +245,18 @@ class LinkedInSearchUrlBuilder:
         if f.under_ten_applicants:
             params["f_EA"] = "true"
 
+        if f.sort_by is not None and f.sort_by in JOB_SORT_BY_MAP:
+            params["sortBy"] = JOB_SORT_BY_MAP[f.sort_by]
+
+        if f.distance is not None:
+            params["distance"] = str(f.distance)
+
+        if f.job_functions:
+            params["f_F"] = ",".join(f.job_functions)
+
+        if f.salary_buckets:
+            params["f_SB2"] = ",".join(f.salary_buckets)
+
         if query.continuation_token:
             params[PARAM_START] = query.continuation_token
 
@@ -258,6 +284,8 @@ class LinkedInSearchUrlBuilder:
             facets.append(f"authorCompany=>{_format_facet_value(f.author_company)}")
         if f.author_industry:
             facets.append(f"authorIndustry=>{_format_facet_value(f.author_industry)}")
+        if f.content_types:
+            facets.append(f"contentType=>{_format_facet_value(f.content_types)}")
 
         if facets:
             params["facet"] = quote(",".join(facets), safe="")

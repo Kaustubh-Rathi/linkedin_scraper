@@ -193,16 +193,94 @@ async def search_jobs():
 async def search_jobs_facade():
     from linkedin_scraper import LinkedInSearchFacade
     from linkedin_scraper.search.queries import JobSearchQuery
+    from linkedin_scraper.search.filters import JobSearchFilter, SortBy
 
     async with BrowserManager(headless=False) as browser:
         await browser.load_session("session.json")
         facade = LinkedInSearchFacade(browser.browser_port)
-        page = await facade.search_jobs(JobSearchQuery(keywords="Python", limit=5))
+        page = await facade.search_jobs(
+            JobSearchQuery(
+                keywords="Python",
+                filters=JobSearchFilter(
+                    location=["San Francisco"],
+                    sort_by=SortBy.DATE,      # newest first
+                    distance=25,               # within 25 miles
+                    employment_types=["full_time"],
+                ),
+                limit=5,
+            )
+        )
         for item in page.items:
             print(f"{item.job_title} at {item.company} - {item.linkedin_url}")
 
 asyncio.run(search_jobs())
 ```
+
+### Search Filters
+
+Every filter shown in the LinkedIn UI is expressible through the typed
+filter models. Examples:
+
+```python
+from linkedin_scraper.search.filters import (
+    ConnectionDegree, DatePosted, ExperienceLevel, EmploymentType,
+    WorkplaceType, JobSearchFilter, PersonSearchFilter, PostSearchFilter,
+)
+from linkedin_scraper.search.queries import PersonSearchQuery
+
+# People search: keywords, degree, location, company, school, industry, language...
+person_query = PersonSearchQuery(
+    keywords="founder",
+    filters=PersonSearchFilter(
+        first_name="Ada",
+        connection_degrees=[ConnectionDegree.SECOND],
+        location=["New York"],
+        current_company=["Acme"],
+        industry=["Software"],
+    ),
+)
+
+# Job search: date posted, experience, type, workplace, salary, function, sort...
+job_filters = JobSearchFilter(
+    date_posted=DatePosted.PAST_WEEK,
+    experience_levels=[ExperienceLevel.MID_SENIOR],
+    employment_types=[EmploymentType.FULL_TIME],
+    workplace_types=[WorkplaceType.REMOTE],
+    sort_by=SortBy.DATE,
+    distance=25,
+    job_functions=["eng"],      # LinkedIn f_F facet codes
+    salary_buckets=["4"],       # LinkedIn f_SB2 facet codes
+    easy_apply_only=True,
+)
+
+# Post search: date, author company/industry, content type, sort order
+post_filters = PostSearchFilter(
+    date_posted=DatePosted.PAST_24H,
+    content_types=["videos", "documents"],
+    sort_by=SortBy.DATE,
+)
+```
+
+### Request Throttling
+
+Scrapers throttle themselves by default: one request at a time with a
+minimum interval between navigations (2 seconds by default). Tune it with
+`LINKEDIN_MIN_REQUEST_INTERVAL` (seconds) or inject a custom
+`RequestThrottler` per scraper/adapter:
+
+```python
+from linkedin_scraper import RequestThrottler
+
+# e.g. gentler pacing for long crawls, or a hard hourly cap
+throttler = RequestThrottler(min_interval=5.0, jitter=2.0, max_requests_per_hour=300)
+scraper = PersonScraper(browser.browser_port, throttler=throttler)
+```
+
+### Selector Registry (adapting to LinkedIn UI changes)
+
+All CSS/UI coupling lives in one module — `linkedin_scraper/selectors.py`.
+If LinkedIn changes its UI, editing that single file is sufficient to fix
+the Python-side selectors across scrapers, extractors, and adapters.
 
 ### Company Posts Scraping
 
@@ -327,11 +405,14 @@ All scraped data is returned as Pydantic models:
 class Person(BaseModel):
     linkedin_url: str
     name: Optional[str]
+    headline: Optional[str]
     location: Optional[str]
     about: Optional[str]
     open_to_work: bool
     experiences: List[Experience]
     educations: List[Education]
+    skills: List[str]
+    volunteer_experiences: List[Experience]
     interests: List[Interest]
     accomplishments: List[Accomplishment]
     contacts: List[Contact]

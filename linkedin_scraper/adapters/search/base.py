@@ -20,7 +20,11 @@ from typing import Any, Callable, Generic, Sequence, TypeVar
 
 from linkedin_scraper.adapters.search.url_builder import LinkedInSearchUrlBuilder
 from linkedin_scraper.core.exceptions import AuthenticationError, RateLimitError
-from linkedin_scraper.core.rate_limit import detect_rate_limit
+from linkedin_scraper.core.rate_limit import (
+    RequestThrottler,
+    detect_rate_limit,
+    get_default_throttler,
+)
 from linkedin_scraper.ports.browser import BrowserPort
 from linkedin_scraper.search.results import SearchPage
 
@@ -85,14 +89,18 @@ class BaseLinkedInSearchAdapter(Generic[ResultT]):
         self,
         browser: BrowserPort,
         url_builder: LinkedInSearchUrlBuilder | None = None,
+        throttler: RequestThrottler | None = None,
     ) -> None:
         self._browser = browser
         self._url_builder = url_builder or LinkedInSearchUrlBuilder()
+        #: Shared by default so all adapters issue one request at a time.
+        self._throttler = throttler or get_default_throttler()
 
     async def _guard_navigation(self, url: str, entity_label: str) -> None:
-        """Navigate to ``url`` and fail fast on auth walls or rate limits."""
+        """Throttle, navigate to ``url``, and fail fast on auth walls or rate limits."""
         logger.info("Navigating to %s search URL: %s", entity_label, url)
-        await self._browser.goto(url, wait_until="domcontentloaded")
+        async with self._throttler:
+            await self._browser.goto(url, wait_until="domcontentloaded")
 
         await detect_rate_limit(self._browser)
         current_url = self._browser.url
