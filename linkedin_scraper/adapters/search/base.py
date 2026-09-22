@@ -171,22 +171,39 @@ class BaseLinkedInSearchAdapter(Generic[ResultT]):
         limit: int,
         parser: CardParser,
         entity_label: str,
+        requires_url: bool = True,
+        dedupe_field: str | None = None,
     ) -> list[ResultT]:
-        """Parse structured JS card dictionaries into view models."""
+        """Parse structured JS card dictionaries into view models.
+
+        Set ``requires_url=False`` for surfaces where LinkedIn exposes no
+        permalink (content search posts); ``dedupe_field`` then names the raw
+        dict key used to de-duplicate identical cards.
+        """
         results: list[ResultT] = []
-        seen_urls: set[str] = set()
+        seen_keys: set[str] = set()
 
         for raw_data in card_data_list:
             if len(results) >= limit:
                 break
             if not isinstance(raw_data, dict):
                 continue
+
             url = raw_data.get("linkedin_url", "")
-            if not url or url in seen_urls:
+            if url:
+                dedupe_key = url
+            elif not requires_url:
+                dedupe_key = str(raw_data.get(dedupe_field or "card_key", ""))
+                if not dedupe_key:
+                    continue
+            else:
+                continue
+
+            if dedupe_key in seen_keys:
                 continue
             try:
                 results.append(parser(raw_data))
-                seen_urls.add(url)
+                seen_keys.add(dedupe_key)
             except RateLimitError:
                 raise
             except ValueError as val_err:
@@ -276,14 +293,19 @@ class BaseLinkedInSearchAdapter(Generic[ResultT]):
         url_markers: Sequence[str],
         parser: CardParser,
         js_body: str | None = None,
+        element_parser: CardParser | None = None,
         element_field_name: str = "name",
         element_extra_fields: dict | None = None,
+        requires_url: bool = True,
+        dedupe_field: str | None = None,
     ) -> SearchPage[ResultT]:
         """
         Execute the full shared search pipeline for one entity type.
 
-        Concrete adapters call this with their entity-specific configuration.
-        ``js_body`` may be omitted for adapters that only support DOM parsing.
+        ``parser`` is used for the JavaScript card path; ``element_parser``
+        (defaults to ``parser``) is used for the element-by-element fallback
+        path. Particles that expose no permalink (content-search posts) declare
+        ``requires_url=False`` and supply a ``dedupe_field``.
         """
         await self._guard_navigation(url, entity_label)
 
@@ -297,14 +319,22 @@ class BaseLinkedInSearchAdapter(Generic[ResultT]):
             await self._evaluate_card_data(js_body) if js_body is not None else None
         )
 
+        element_parser = element_parser or parser
         if card_data_list is not None:
-            results = self._parse_raw_cards(card_data_list, limit, parser, entity_label)
+            results = self._parse_raw_cards(
+                card_data_list,
+                limit,
+                parser,
+                entity_label,
+                requires_url=requires_url,
+                dedupe_field=dedupe_field,
+            )
         else:
             results = await self._parse_element_cards(
                 limit,
                 card_selector,
                 url_markers,
-                parser,
+                element_parser,
                 entity_label,
                 element_field_name=element_field_name,
                 extra_fields=element_extra_fields,

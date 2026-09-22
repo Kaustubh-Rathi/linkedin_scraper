@@ -122,6 +122,20 @@ class Company:
     DEFINITION_TERM = "dt"
     DEFINITION_VALUE = "dd"
     ALL_ANCHORS = "a"
+    #: Company-scoped people page exposes the canonical numeric company URN;
+    #: used to resolve slugs to the IDs that search facets require.
+    PEOPLE_PATH = "people/"
+    ALL_TEXT_BLOCKS = "span, div"
+
+
+class UiText:
+    """Human-visible UI strings used as DOM markers (LinkedIn wording)."""
+
+    FEED_POST_HEADING_PREFIX = "feed post"
+    FEED_POST_NUMBER_PREFIX = "feed post number"
+    FOLLOW = "follow"
+    REVIEWS_TEXT = "reviews"
+
 
 
 class Job:
@@ -154,3 +168,15 @@ class SearchCards:
     JOB_URL_MARKERS = ("/jobs/view/",)
     POST_URL_MARKERS = ("/feed/update/", "/posts/")
     EMPLOYEE_URL_MARKERS = PERSON_URL_MARKERS
+
+    #: Content search results have NO permalink anchors/URNs; cards are located
+    #: by their accessibility heading text instead (verified live 2026-09).
+    CONTENT_POST_HEADING = "Feed post"
+    #: Company + content post containers (stable data attributes).
+    FEED_UPDATE_CARD = ".feed-shared-update-v2"
+    #: Wait target for content search: the container always exists, cards vary.
+    CONTENT_WAIT = "main"
+
+    #: People search results rendered anonymously by LinkedIn (verified live).
+    ANONYMIZED_MEMBER_LABEL = "LinkedIn Member"
+

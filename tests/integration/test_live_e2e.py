@@ -119,7 +119,7 @@ async def test_live_people_search(browser_with_session):
         keywords="Satya Nadella",
         limit=3,
         filters=PersonSearchFilter(
-            network_depths=[ConnectionDegree.SECOND, ConnectionDegree.THIRD]
+            connection_degrees=[ConnectionDegree.SECOND, ConnectionDegree.THIRD]
         ),
     )
     try:
@@ -154,7 +154,7 @@ async def test_live_employee_search(browser_with_session):
         company_identifier="Microsoft",
         keywords="Software Engineer",
         limit=3,
-        filters=EmployeeSearchFilter(titles=["Software Engineer"]),
+        filters=EmployeeSearchFilter(title="Software Engineer"),
     )
     try:
         page_res = await search_adapter.search_employees(query)

@@ -361,3 +361,4 @@ async def test_search_posts_rate_limit_body_text_only_does_not_raise():
 
     assert len(page.items) == 1
     assert page.items[0].text_snippet == "Post 1"
+

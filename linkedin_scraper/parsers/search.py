@@ -17,6 +17,7 @@ from linkedin_scraper.models.search_results import (
     PersonSearchResult,
     PostSearchResult,
 )
+from linkedin_scraper.parsers.post_cards import build_post_search_result
 
 
 def _clean_str(val: Any) -> str | None:
@@ -155,6 +156,30 @@ def parse_job_search_card(data: Mapping[str, Any]) -> JobSearchResult:
         posted_date=_clean_str(data.get("posted_date") or data.get("posted_at")),
         easy_apply=easy_apply,
     )
+
+
+def parse_post_search_card_from_lines(data: Mapping[str, Any]) -> PostSearchResult:
+    """Parse a content-search post card captured as rendered text lines.
+
+    Content search exposes no permalink/URN, so the card is described by
+    ``lines`` (rendered text) plus an optional ``author_href`` and
+    ``permalink``. Raises ``ValueError`` when the card has no author, which the
+    shared adapter logs and skips.
+    """
+    lines = data.get("lines") or []
+    if not lines:
+        raise ValueError("Post search card missing rendered text lines")
+
+    result = build_post_search_result(
+        lines=lines,
+        author_href=_clean_str(data.get("author_href")),
+        urn=_clean_str(data.get("urn")),
+        permalink=_clean_str(data.get("permalink")),
+        reactions=_parse_int(data.get("reactions")),
+    )
+    if result is None:
+        raise ValueError("Post search card missing required field 'author_name'")
+    return result
 
 
 def parse_post_search_card(data: Mapping[str, Any]) -> PostSearchResult:
