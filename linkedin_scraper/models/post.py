@@ -1,8 +1,11 @@
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional
+
+from pydantic import Field
+
+from .base import BaseScraperModel
 
 
-class Post(BaseModel):
+class Post(BaseScraperModel):
     linkedin_url: Optional[str] = None
     urn: Optional[str] = None
     text: Optional[str] = None
@@ -13,13 +16,7 @@ class Post(BaseModel):
     image_urls: List[str] = Field(default_factory=list)
     video_url: Optional[str] = None
     article_url: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return self.model_dump()
-    
-    def to_json(self, **kwargs) -> str:
-        return self.model_dump_json(**kwargs)
-    
+
     def __repr__(self) -> str:
         text_preview = self.text[:80] + "..." if self.text and len(self.text) > 80 else self.text
         return (

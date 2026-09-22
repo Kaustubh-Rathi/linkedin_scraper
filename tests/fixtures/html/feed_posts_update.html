@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Company Feed Posts | LinkedIn</title>
+</head>
+<body>
+  <div class="feed-shared-update-v2-container">
+    <!-- Post 1: Full structured update with commentary, images, social metrics, time -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7100000000000000001">
+      <div class="feed-shared-actor">
+        <span class="feed-shared-actor__title">Microsoft</span>
+        <span class="update-components-actor__sub-description">3d • Edited</span>
+      </div>
+      <div class="feed-shared-update-v2__description">
+        <span class="break-words whitespace-pre-wrap">We are excited to introduce our new open platform capabilities for intelligent agent workflows, built for enterprises globally.</span>
+      </div>
+      <div class="update-components-image">
+        <img class="ivm-view-attr__img--centered" src="https://media.licdn.com/dms/image/v2/D5622AQ/feedshare-shrink_800/0/1234567?e=123" alt="Platform diagram">
+        <!-- Profile photo to filter out -->
+        <img class="feed-shared-actor__avatar-image" src="https://media.licdn.com/dms/image/profile_avatar_small.jpg" alt="Profile">
+      </div>
+      <div class="social-details-social-counts">
+        <button aria-label="1,850 reactions" class="social-details-social-counts__reactions">1,850 reactions</button>
+        <button aria-label="95 comments">95 comments</button>
+        <button aria-label="42 reposts">42 reposts</button>
+      </div>
+    </div>
+
+    <!-- Post 2: Alternative text selector (`[data-test-id="main-feed-activity-card__commentary"]`), relative time "2 weeks ago", Acme Corporation actor -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7100000000000000002">
+      <div class="feed-shared-actor">
+        <span class="feed-shared-actor__title">Acme Corporation</span>
+        <span class="actor__sub-description">2 weeks ago • Visible to anyone</span>
+      </div>
+      <div data-test-id="main-feed-activity-card__commentary">
+        Deep dive into our latest research benchmarking foundation models across code reasoning and multimodal understanding benchmarks.
+      </div>
+      <div class="social-details-social-counts">
+        <button aria-label="520 reactions">520</button>
+        <button aria-label="18 comments">18</button>
+      </div>
+    </div>
+
+    <!-- Post 3: Alternative text selector (`.update-components-text`), no images, time "Just now", Global Tech actor -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7100000000000000003">
+      <div class="feed-shared-actor">
+        <span class="feed-shared-actor__title">Global Tech Innovations</span>
+        <span class="actor__sub-description">Just now • Published</span>
+      </div>
+      <div class="update-components-text">
+        <span class="break-words">Registration for our annual developer summit is now officially open! Join us online or in person.</span>
+      </div>
+    </div>
+
+    <!-- Post 4: Fallback nested div text extraction, single image, K-formatted counts, Google LLC actor -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7100000000000000004">
+      <div class="feed-shared-actor">
+        <span class="feed-shared-actor__title">Google LLC</span>
+        <span class="update-components-actor__sub-description">5h</span>
+      </div>
+      <div class="custom-container-layout">
+        <div class="inner-content-wrapper">
+          Here is a detailed breakdown of how our infrastructure team scaled throughput by 4x while cutting latency in half.
+        </div>
+      </div>
+      <img src="https://media.licdn.com/dms/image/v2/D5622AQ/feedshare-graph.png" alt="Latency Chart">
+      <div class="social-details-social-counts">
+        <button aria-label="3,400 reactions">3,400</button>
+      </div>
+    </div>
+
+    <!-- Post 5: Malformed post (urn missing or empty text, should be skipped) -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:invalid_empty">
+      <div class="feed-shared-actor">
+        <span class="actor__sub-description">1d</span>
+      </div>
+    </div>
+
+    <!-- Post 6: Post with repeated actor header that tests generic non-Microsoft header exclusion -->
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7100000000000000006">
+      <div class="feed-shared-actor">
+        <span class="feed-shared-actor__title">Acme Corporation</span>
+        <span class="feed-shared-actor__title">Acme Corporation</span>
+        <span class="update-components-actor__sub-description">1w</span>
+      </div>
+      <div class="feed-shared-update-v2__description">
+        <span class="break-words whitespace-pre-wrap">Announcing our Q3 product roadmap with automated agents and native Python integration.</span>
+      </div>
+      <div class="social-details-social-counts">
+        <button aria-label="780 reactions">780</button>
+        <button aria-label="45 comments">45</button>
+        <button aria-label="12 reposts">12</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

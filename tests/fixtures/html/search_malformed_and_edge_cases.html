@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edge Cases and Malformed Search HTML</title>
+</head>
+<body>
+  <div class="search-container">
+    <!-- Item 1: Person link with huge whitespace and internal badge text -->
+    <a class="app-aware-link" href="  https://www.linkedin.com/in/john-doe-123456/   ?trk=search  ">
+      
+      
+        John Doe
+        <span><span aria-hidden="true"> • 1st</span></span>
+      
+      
+    </a>
+
+    <!-- Item 2: Person link with no text (empty title) -->
+    <a href="https://www.linkedin.com/in/empty-name/">   </a>
+
+    <!-- Item 3: Person link with changed attribute order -->
+    <a target="_blank" rel="noopener" data-control-name="actor" href="https://www.linkedin.com/in/jane-smith-999#profile" id="user-jane">
+      Jane Smith
+    </a>
+
+    <!-- Item 4: Company link with query parameters only / fragment only -->
+    <a href="?company=test">Invalid Company Fragment</a>
+    <a href="#company-section">Anchor Only</a>
+
+    <!-- Item 5: Company link with whitespace and multiplier followers -->
+    <a href="https://www.linkedin.com/company/mega-corp-inc/?viewAsMember=true">
+      
+      MegaCorp
+      
+    </a>
+
+    <!-- Item 6: Job link with whitespace and tracking param -->
+    <a href="https://www.linkedin.com/jobs/view/9988776655/?position=1&pageNum=0">
+      
+      Staff Infrastructure Engineer
+      
+    </a>
+
+    <!-- Item 7: Job link missing title -->
+    <a href="https://www.linkedin.com/jobs/view/1122334455/"></a>
+
+    <!-- Item 8: Post update link with URL encoding and fragment -->
+    <a href="https://www.linkedin.com/feed/update/urn%3Ali%3Aactivity%3A8888777766665555444/?origin=SHARED_UPDATE#feed-item">
+      Check out our quarterly open-source performance review!
+    </a>
+
+    <!-- Item 9: Post link in /posts/ format -->
+    <a href="https://www.linkedin.com/posts/alex-dev_cloud-systems-architecture-activity-8888777766665555445-xyz1?utm_source=share">
+      Insights on modern distributed systems.
+    </a>
+
+    <!-- Item 10: Non-standard / malformed links -->
+    <a href="javascript:void(0)">Click Here</a>
+    <a href="mailto:contact@example.com">Email Us</a>
+    <a href="https://example.com/other">External Site</a>
+  </div>
+</body>
+</html>

@@ -1,25 +1,14 @@
-# Include documentation
+# Package documentation
 include README.md
 include LICENSE
-include AGENTS.md
-include ARCHITECTURE.md
-include USAGE.md
+include CONTRIBUTING.md
 include TESTING.md
+include CHANGELOG.md
+include .env.example
 
-# Include configuration files
-include config.yaml
-include test_config.yaml
-include docker-compose.yml
-include requirements.txt
-include requirements-dev.txt
-
-# Include setup files
-include setup.py
-include setup.cfg
-include pytest.ini
-
-# Include all Python files in the package
+# Include all Python files and typing marker in the package
 recursive-include linkedin_scraper *.py
+recursive-include linkedin_scraper py.typed
 
 # Exclude build, test, and cache files
 global-exclude __pycache__
@@ -28,12 +17,11 @@ global-exclude *$py.class
 global-exclude *.so
 global-exclude .DS_Store
 
-# Exclude test files and directories
 prune tests
-prune samples
 prune build
 prune dist
 prune *.egg-info
 prune venv
+prune .venv
 prune .pytest_cache
 prune .git

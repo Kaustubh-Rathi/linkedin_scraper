@@ -1,5 +1,7 @@
 """Custom exceptions for LinkedIn scraper."""
 
+from typing import Optional
+
 
 class LinkedInScraperException(Exception):
     """Base exception for LinkedIn scraper."""
@@ -13,7 +15,7 @@ class AuthenticationError(LinkedInScraperException):
 
 class RateLimitError(LinkedInScraperException):
     """Raised when rate limiting is detected."""
-    
+
     def __init__(self, message: str, suggested_wait_time: int = 300):
         super().__init__(message)
         self.suggested_wait_time = suggested_wait_time
@@ -37,3 +39,21 @@ class NetworkError(LinkedInScraperException):
 class ScrapingError(LinkedInScraperException):
     """Raised when scraping fails for various reasons."""
     pass
+
+
+class RequiredFieldExtractionError(ScrapingError):
+    """Raised when a required entity identifier or field cannot be extracted."""
+
+    def __init__(
+        self,
+        field_name: str,
+        entity_url: "Optional[str]" = None,
+        message: "Optional[str]" = None,
+    ):
+        msg = message or f"Failed to extract required field '{field_name}'"
+        if entity_url:
+            msg += f" from {entity_url}"
+        super().__init__(msg)
+        self.field_name = field_name
+        self.entity_url = entity_url
+

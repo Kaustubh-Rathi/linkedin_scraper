@@ -2,22 +2,29 @@
 Pytest configuration and fixtures for linkedin_scraper tests.
 """
 import pytest
-import asyncio
 from pathlib import Path
 from linkedin_scraper import BrowserManager
 from linkedin_scraper.callbacks import SilentCallback
+from linkedin_scraper.core.rate_limit import get_default_throttler
+
+
+@pytest.fixture(autouse=True)
+def _disable_throttle_delays():
+    """Zero out the shared request throttler so offline tests run instantly.
+
+    Production code still throttles (one request at a time, min interval);
+    tests must not sleep between navigations.
+    """
+    throttler = get_default_throttler()
+    saved_interval, saved_jitter = throttler.min_interval, throttler.jitter
+    throttler.min_interval = 0.0
+    throttler.jitter = 0.0
+    yield
+    throttler.min_interval, throttler.jitter = saved_interval, saved_jitter
 
 
 # Session file path
 SESSION_FILE = Path(__file__).parent.parent / "linkedin_session.json"
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture
@@ -47,7 +54,7 @@ async def browser_with_session():
     """
     if not SESSION_FILE.exists():
         pytest.skip("Session file not found. See README for session setup instructions.")
-    
+
     async with BrowserManager(headless=False) as browser_manager:
         await browser_manager.load_session(str(SESSION_FILE))
         yield browser_manager
@@ -100,4 +107,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "unit: mark test as unit test"
+    )
+    config.addinivalue_line(
+        "markers", "live: mark test as live E2E test requiring real LinkedIn network and authentication"
+    )
+    config.addinivalue_line(
+        "markers", "e2e: mark test as end-to-end test requiring full setup"
     )

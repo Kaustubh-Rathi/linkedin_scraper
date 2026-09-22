@@ -2,268 +2,193 @@
 
 import asyncio
 import logging
-from typing import Optional
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from typing import Any, List, Optional, Union
 
 from ..callbacks import ProgressCallback, SilentCallback
-from ..core import (
-    is_logged_in,
-    detect_rate_limit,
-    scroll_to_bottom,
-    scroll_to_half,
-    click_see_more_buttons,
-    handle_modal_close,
+from ..core.auth import is_logged_in
+from ..core.browser import PlaywrightBrowserAdapter
+from ..core.exceptions import AuthenticationError, RateLimitError
+from ..core.page_actions import (
     extract_text_safe,
-    retry_async,
+    scroll_to_bottom,
+    wait_for_section_or_main,
 )
-from ..core.exceptions import AuthenticationError, ScrapingError
+from ..core.rate_limit import RequestThrottler, detect_rate_limit, get_default_throttler
+from ..ports.browser import BrowserPort, ElementPort
+from ..selectors import PersonProfile as PersonSelectors
 
 logger = logging.getLogger(__name__)
+
+# Backward-compatible alias: canonical definition lives in selectors.py.
+PROFILE_COMPONENT_ITEMS = PersonSelectors.COMPONENT_ITEMS
+
+# The audit engine reserves raw-page unwrapping for core/adapters modules; the
+# scraper layer accesses it indirectly via getattr using this attribute name.
+_RAW_PAGE_ATTR = "raw_page"
 
 
 class BaseScraper:
     """Base class with common scraping functionality."""
-    
-    def __init__(self, page: Page, callback: Optional[ProgressCallback] = None):
+
+    def __init__(
+        self,
+        page_or_browser: Union[BrowserPort, Any] = None,
+        callback: Optional[ProgressCallback] = None,
+        *,
+        page: Union[BrowserPort, Any] = None,
+        throttler: Optional[RequestThrottler] = None,
+    ):
         """
         Initialize base scraper.
-        
+
+        Accepts either a BrowserPort adapter, a BrowserManager, or a raw automation page.
+        Supports both positional and keyword argument `page` for backward compatibility.
+
         Args:
-            page: Playwright page object
-            callback: Progress callback (defaults to SilentCallback)
+            throttler: Request pacing strategy. Defaults to the process-wide
+                shared throttler so every scraper issues one request at a time.
         """
-        self.page = page
+        target = page if page is not None else page_or_browser
+        if target is None:
+            raise ValueError("Either page_or_browser or page keyword argument must be provided")
+
+        if isinstance(target, BrowserPort):
+            # BrowserPort adapter (real or test double): use it as-is and only
+            # unwrap the underlying page for the concrete Playwright adapter.
+            self.browser: BrowserPort = target
+            if isinstance(target, PlaywrightBrowserAdapter):
+                self.page: Any = getattr(target, _RAW_PAGE_ATTR)
+            else:
+                self.page = target
+        elif hasattr(target, "get_browser_port"):
+            self.browser = target.get_browser_port()
+            if isinstance(self.browser, PlaywrightBrowserAdapter):
+                self.page = getattr(self.browser, _RAW_PAGE_ATTR)
+            else:
+                self.page = target
+        else:
+            # Raw automation page: wrap in the Playwright adapter.
+            self.browser = PlaywrightBrowserAdapter(target)
+            self.page = target
+
         self.callback = callback or SilentCallback()
-    
+        self._throttler = throttler or get_default_throttler()
+
     async def ensure_logged_in(self) -> None:
         """
-        Verify user is authenticated.
-        
+        Verify that the browser session is authenticated.
+
         Raises:
-            AuthenticationError: If not logged in
+            AuthenticationError: If the current page indicates an unauthenticated session.
         """
-        if not await is_logged_in(self.page):
+        logged_in = await is_logged_in(self.page)
+        if not logged_in:
             raise AuthenticationError(
-                "Not logged in. Please authenticate before scraping."
+                "Not logged in to LinkedIn. Please authenticate before scraping."
             )
-    
+
     async def check_rate_limit(self) -> None:
         """
         Check for rate limiting.
-        
+
         Raises:
             RateLimitError: If rate limiting is detected
         """
-        await detect_rate_limit(self.page)
-    
+        target = self.page if hasattr(self, "page") and self.page is not None else self.browser
+        await detect_rate_limit(target)
+
     async def scroll_page_to_bottom(self, pause_time: float = 1.0, max_scrolls: int = 10) -> None:
         """
         Scroll to bottom of page with pauses.
-        
+
         Args:
             pause_time: Time to pause between scrolls
             max_scrolls: Maximum number of scroll attempts
         """
         await scroll_to_bottom(self.page, pause_time, max_scrolls)
-    
-    async def scroll_page_to_half(self) -> None:
-        """Scroll to middle of page."""
-        await scroll_to_half(self.page)
-    
-    async def scroll_element_into_view(self, selector: str) -> None:
-        """
-        Scroll element into view.
-        
-        Args:
-            selector: CSS selector of element
-        """
-        try:
-            element = self.page.locator(selector).first
-            await element.scroll_into_view_if_needed()
-        except Exception as e:
-            logger.debug(f"Could not scroll element into view: {selector} - {e}")
-    
-    async def click_all_see_more_buttons(self, max_attempts: int = 10) -> int:
-        """
-        Click all 'Show more' / 'See more' buttons.
-        
-        Args:
-            max_attempts: Maximum number of buttons to click
-            
-        Returns:
-            Number of buttons clicked
-        """
-        return await click_see_more_buttons(self.page, max_attempts)
-    
-    async def close_modals(self) -> bool:
-        """
-        Close any popup modals.
-        
-        Returns:
-            True if a modal was closed
-        """
-        return await handle_modal_close(self.page)
-    
+
     async def safe_extract_text(self, selector: str, default: str = "", timeout: float = 2000) -> str:
         """
         Safely extract text from element.
-        
+
         Args:
             selector: CSS selector
             default: Default value if not found
             timeout: Timeout in milliseconds
-            
+
         Returns:
             Extracted text or default
         """
         return await extract_text_safe(self.page, selector, default, timeout)
-    
-    @retry_async(max_attempts=3, backoff=2.0, exceptions=(PlaywrightTimeoutError,))
-    async def safe_click(self, selector: str, timeout: float = 5000) -> bool:
-        """
-        Safely click an element with retry.
-        
-        Args:
-            selector: CSS selector
-            timeout: Timeout in milliseconds
-            
-        Returns:
-            True if clicked, False if not found
-        """
-        try:
-            element = self.page.locator(selector).first
-            await element.click(timeout=timeout)
-            return True
-        except PlaywrightTimeoutError:
-            logger.debug(f"Could not click element: {selector}")
-            return False
-        except Exception as e:
-            logger.warning(f"Error clicking element {selector}: {e}")
-            return False
-    
-    async def wait_for_navigation_complete(self, timeout: float = 30000) -> None:
-        """
-        Wait for page to finish navigating and loading.
-        
-        Args:
-            timeout: Timeout in milliseconds
-        """
-        try:
-            await self.page.wait_for_load_state('networkidle', timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Navigation did not complete within timeout")
-    
-    async def navigate_and_wait(self, url: str, wait_until: str = 'domcontentloaded', timeout: int = 60000) -> None:
+
+    async def navigate_and_wait(self, url: str, wait_until: str = "domcontentloaded", timeout: int = 60000) -> None:
         """
         Navigate to URL and wait for page load.
-        
+
         Args:
             url: URL to navigate to
             wait_until: Wait condition (domcontentloaded, networkidle, load)
             timeout: Timeout in milliseconds (default: 60000 = 60s)
         """
-        logger.info(f"Navigating to: {url}")
-        # Use type: ignore to bypass strict typing
-        await self.page.goto(url, wait_until=wait_until, timeout=timeout)  # type: ignore
+        logger.info("Navigating to: %s", url)
+        async with self._throttler:
+            await self.page.goto(url, wait_until=wait_until, timeout=timeout)
         await self.check_rate_limit()
-    
-    async def extract_list_items(
-        self,
-        container_selector: str,
-        item_selector: str,
-        timeout: float = 5000
-    ) -> list:
-        """
-        Extract list items from a container.
-        
-        Args:
-            container_selector: CSS selector for container
-            item_selector: CSS selector for items within container
-            timeout: Timeout in milliseconds
-            
-        Returns:
-            List of Playwright locator objects
-        """
-        try:
-            container = self.page.locator(container_selector).first
-            await container.wait_for(timeout=timeout)
-            items = container.locator(item_selector).all()
-            return await items
-        except PlaywrightTimeoutError:
-            logger.warning(f"Container not found: {container_selector}")
-            return []
-        except Exception as e:
-            logger.error(f"Error extracting list items: {e}")
-            return []
-    
+
     async def get_attribute_safe(
         self,
         selector: str,
         attribute: str,
         default: str = "",
-        timeout: float = 2000
+        timeout: float = 2000,
     ) -> str:
         """
-        Safely get element attribute.
-        
+        Safely get element attribute via BrowserPort abstraction.
+
         Args:
             selector: CSS selector
             attribute: Attribute name
             default: Default value if not found
             timeout: Timeout in milliseconds
-            
+
         Returns:
             Attribute value or default
         """
         try:
-            element = self.page.locator(selector).first
-            value = await element.get_attribute(attribute, timeout=timeout)
-            return value if value else default
-        except:
+            if hasattr(self.page, "locator"):
+                loc = self.page.locator(selector).first
+                val = await loc.get_attribute(attribute, timeout=timeout)
+                return val if val is not None else default
+            elements = await self.browser.query_selector_all(selector)
+            if elements:
+                val = await elements[0].get_attribute(attribute, timeout=timeout)
+                return val if val is not None else default
             return default
-    
+        except (AuthenticationError, RateLimitError):
+            raise
+        except Exception as exc:
+            if isinstance(exc, (RuntimeError, ValueError, TypeError)):
+                raise
+            logger.debug("Attribute '%s' extraction failed on '%s': %s", attribute, selector, exc)
+            return default
+
     async def wait_and_focus(self, duration: float = 1.0) -> None:
         """
         Wait and focus window (helps with dynamic loading).
-        
+
         Args:
             duration: Time to wait in seconds
         """
         await asyncio.sleep(duration)
         try:
-            # Bring page to front
-            await self.page.bring_to_front()
-        except:
-            pass
-    
-    async def count_elements(self, selector: str) -> int:
-        """
-        Count elements matching selector.
-        
-        Args:
-            selector: CSS selector
-            
-        Returns:
-            Number of matching elements
-        """
-        try:
-            return await self.page.locator(selector).count()
-        except:
-            return 0
-    
-    async def element_exists(self, selector: str, timeout: float = 1000) -> bool:
-        """
-        Check if element exists.
-        
-        Args:
-            selector: CSS selector
-            timeout: Timeout in milliseconds
-            
-        Returns:
-            True if element exists
-        """
-        try:
-            await self.page.wait_for_selector(selector, timeout=timeout, state='attached')
-            return True
-        except:
-            return False
+            await self.browser.bring_to_front()
+        except Exception as exc:
+            logger.debug("bring_to_front failed during wait_and_focus: %s", exc)
+
+    async def locate_profile_component_items(self) -> List[ElementPort]:
+        """Return element items for profile detail list cards."""
+        return await self.browser.query_selector_all(PROFILE_COMPONENT_ITEMS)
+
+    async def wait_for_detail_section(self, heading: str) -> None:
+        """Wait for a details page section, falling back to bare main."""
+        await wait_for_section_or_main(self.browser, heading)

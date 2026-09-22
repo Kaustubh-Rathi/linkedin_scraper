@@ -1,24 +1,27 @@
 """Pydantic models for LinkedIn Company data."""
 
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional
+
+from pydantic import Field, field_validator
+
+from .base import BaseScraperModel
 
 
-class CompanySummary(BaseModel):
+class CompanySummary(BaseScraperModel):
     """Summary information for affiliated/showcase companies."""
     linkedin_url: Optional[str] = None
     name: Optional[str] = None
     followers: Optional[str] = None
 
 
-class Employee(BaseModel):
+class Employee(BaseScraperModel):
     """Employee information."""
     name: str
     designation: Optional[str] = None
     linkedin_url: Optional[str] = None
 
 
-class Company(BaseModel):
+class Company(BaseScraperModel):
     """
     LinkedIn Company model with validation.
     
@@ -35,11 +38,12 @@ class Company(BaseModel):
     company_type: Optional[str] = None
     company_size: Optional[str] = None
     specialties: Optional[str] = None
+    # Reserved for future scrapers — CompanyScraper does not populate these yet.
     headcount: Optional[int] = None
     showcase_pages: List[CompanySummary] = Field(default_factory=list)
     affiliated_companies: List[CompanySummary] = Field(default_factory=list)
     employees: List[Employee] = Field(default_factory=list)
-    
+
     @field_validator('linkedin_url')
     @classmethod
     def validate_linkedin_url(cls, v: str) -> str:
@@ -47,28 +51,7 @@ class Company(BaseModel):
         if 'linkedin.com/company/' not in v:
             raise ValueError('Must be a valid LinkedIn company URL (contains /company/)')
         return v
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert to dictionary.
-        
-        Returns:
-            Dictionary representation of the company
-        """
-        return self.model_dump()
-    
-    def to_json(self, **kwargs) -> str:
-        """
-        Convert to JSON string.
-        
-        Args:
-            **kwargs: Additional arguments for model_dump_json (e.g., indent=2)
-        
-        Returns:
-            JSON string representation
-        """
-        return self.model_dump_json(**kwargs)
-    
+
     def __repr__(self) -> str:
         """String representation."""
         return (

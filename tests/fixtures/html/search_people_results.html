@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>People Search Results | LinkedIn</title>
+</head>
+<body>
+  <div class="search-results-container">
+    <ul class="reusable-search__entity-result-list">
+      <!-- Card 1: Standard full profile with clean text -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/in/satyanadella?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3A12345&trackingId=abc">
+                <span dir="ltr"><span aria-hidden="true">Satya Nadella</span></span>
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">Chairman and CEO at Microsoft</div>
+            <div class="entity-result__secondary-subtitle">Greater Seattle Area</div>
+            <div class="entity-result__summary">Current: Chairman and CEO at Microsoft</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 2: Whitespace variations, newlines, degree connection badges -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/in/alicesmith/?trk=people-search_result">
+                <span>
+                  
+                  Alice Smith
+                  
+                  <span class="visually-hidden">1st degree connection</span>
+                </span>
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">
+              Principal Architect · Distributed Systems & Cloud Platforms
+            </div>
+            <div class="entity-result__secondary-subtitle">
+              San Francisco Bay Area
+            </div>
+            <div class="entity-result__summary">
+              Current: Tech Lead at Anthropic
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 3: Missing optional fields (no headline, no location, no current company) -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/in/bob-jones/">
+                Bob Jones
+              </a>
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 4: Alternative layout / attributes in different order -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a target="_self" id="ember1042" class="scale-down app-aware-link" href="https://www.linkedin.com/in/carol-danvers#details">
+                <span class="entity-result__title-line">Carol Danvers</span>
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">VP of Engineering</div>
+            <div class="entity-result__secondary-subtitle">New York, NY</div>
+            <div class="entity-result__summary">Current: Stark Industries</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 5: LinkedIn Member (out of network, no custom name) -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <div class="entity-result__title-text">
+              <a class="app-aware-link" href="https://www.linkedin.com/in/ACoAABxxx123">
+                LinkedIn Member
+              </a>
+            </div>
+            <div class="entity-result__primary-subtitle">Software Engineer at Google</div>
+            <div class="entity-result__secondary-subtitle">Austin, Texas</div>
+          </div>
+        </div>
+      </li>
+
+      <!-- Card 6: Malformed / Non-person navigation links (should be skipped or handled) -->
+      <li class="reusable-search__result-container">
+        <div class="entity-result">
+          <div class="entity-result__content">
+            <a href="https://www.linkedin.com/learning/python-course">Learn Python</a>
+            <a href="#">#</a>
+            <a href="javascript:void(0)">Action</a>
+            <a href="https://www.linkedin.com/in/valid-user/">Valid User</a>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>

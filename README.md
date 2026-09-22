@@ -46,31 +46,36 @@ asyncio.run(main())
 ```bash
 pip install linkedin-scraper==2.11.2
 ```
-## Quick Testing
+## Quick start (CLI)
 
-To test that this works, you can clone this repo, install dependencies with
+```bash
+pip install -e ".[dev]"
+playwright install chromium
+
+# One-time: create an authenticated session (opens a browser)
+linkedin-scraper login
+
+# Scrape
+linkedin-scraper person https://www.linkedin.com/in/williamhgates/
+linkedin-scraper company https://www.linkedin.com/company/microsoft/
+linkedin-scraper jobs --keywords "software engineer" --location "Toronto" --limit 5
+linkedin-scraper posts https://www.linkedin.com/company/microsoft/ --limit 10
+
+# Optional: write JSON to a file
+linkedin-scraper person https://www.linkedin.com/in/williamhgates/ -o person.json
 ```
-git clone https://github.com/joeyism/linkedin_scraper.git
-cd linkedin_scraper
-pip3 install -e .
-```
-then run
-```
-python3 samples/create_session.py
-python3 samples/scrape_company.py
-python3 samples/scrape_person.py
-```
-and you will see the scraping in action.
+
+You can also run `python -m linkedin_scraper ...` with the same arguments.
 
 ---
 
 ## Features
 
 - **Person Profiles** - Scrape comprehensive profile information
-  - Basic info (name, headline, location, about)
+  - Basic info (name, location, about, open-to-work)
   - Work experience with details
   - Education history
-  - Skills and accomplishments
+  - Interests, accomplishments, and contacts
   
 - **Company Pages** - Extract company information
   - Company overview and details
@@ -106,7 +111,14 @@ playwright install chromium
 
 ## Quick Start
 
-### Basic Usage
+### CLI
+
+```bash
+linkedin-scraper login
+linkedin-scraper person https://linkedin.com/in/username -o out.json
+```
+
+### Python library
 
 ```python
 import asyncio
@@ -116,7 +128,7 @@ async def main():
     # Initialize browser
     async with BrowserManager(headless=False) as browser:
         # Load authenticated session
-        await browser.load_session("session.json")
+        await browser.load_session("linkedin_session.json")
         
         # Create scraper
         scraper = PersonScraper(browser.page)
@@ -126,8 +138,8 @@ async def main():
         
         # Access data
         print(f"Name: {person.name}")
-        print(f"Headline: {person.headline}")
         print(f"Location: {person.location}")
+        print(f"About: {(person.about or '')[:200]}")
         print(f"Experiences: {len(person.experiences)}")
         print(f"Education: {len(person.educations)}")
 
@@ -157,27 +169,118 @@ asyncio.run(scrape_company())
 ### Job Scraping
 
 ```python
-from linkedin_scraper import JobSearchScraper
+from linkedin_scraper import BrowserManager, JobScraper, JobSearchScraper
 
 async def search_jobs():
     async with BrowserManager(headless=False) as browser:
         await browser.load_session("session.json")
         
-        scraper = JobSearchScraper(browser.page)
-        jobs = await scraper.search(
+        search_scraper = JobSearchScraper(browser.page)
+        job_urls = await search_scraper.search(
             keywords="Python Developer",
             location="San Francisco",
             limit=10
         )
         
-        for job in jobs:
-            print(f"{job.title} at {job.company}")
+        job_scraper = JobScraper(browser.page)
+        for url in job_urls:
+            job = await job_scraper.scrape(url)
+            print(f"{job.job_title} at {job.company}")
             print(f"Location: {job.location}")
             print(f"Link: {job.linkedin_url}")
             print("---")
 
+async def search_jobs_facade():
+    from linkedin_scraper import LinkedInSearchFacade
+    from linkedin_scraper.search.queries import JobSearchQuery
+    from linkedin_scraper.search.filters import JobSearchFilter, SortBy
+
+    async with BrowserManager(headless=False) as browser:
+        await browser.load_session("session.json")
+        facade = LinkedInSearchFacade(browser.browser_port)
+        page = await facade.search_jobs(
+            JobSearchQuery(
+                keywords="Python",
+                filters=JobSearchFilter(
+                    location=["San Francisco"],
+                    sort_by=SortBy.DATE,      # newest first
+                    distance=25,               # within 25 miles
+                    employment_types=["full_time"],
+                ),
+                limit=5,
+            )
+        )
+        for item in page.items:
+            print(f"{item.job_title} at {item.company} - {item.linkedin_url}")
+
 asyncio.run(search_jobs())
 ```
+
+### Search Filters
+
+Every filter shown in the LinkedIn UI is expressible through the typed
+filter models. Examples:
+
+```python
+from linkedin_scraper.search.filters import (
+    ConnectionDegree, DatePosted, ExperienceLevel, EmploymentType,
+    WorkplaceType, JobSearchFilter, PersonSearchFilter, PostSearchFilter,
+)
+from linkedin_scraper.search.queries import PersonSearchQuery
+
+# People search: keywords, degree, location, company, school, industry, language...
+person_query = PersonSearchQuery(
+    keywords="founder",
+    filters=PersonSearchFilter(
+        first_name="Ada",
+        connection_degrees=[ConnectionDegree.SECOND],
+        location=["New York"],
+        current_company=["Acme"],
+        industry=["Software"],
+    ),
+)
+
+# Job search: date posted, experience, type, workplace, salary, function, sort...
+job_filters = JobSearchFilter(
+    date_posted=DatePosted.PAST_WEEK,
+    experience_levels=[ExperienceLevel.MID_SENIOR],
+    employment_types=[EmploymentType.FULL_TIME],
+    workplace_types=[WorkplaceType.REMOTE],
+    sort_by=SortBy.DATE,
+    distance=25,
+    job_functions=["eng"],      # LinkedIn f_F facet codes
+    salary_buckets=["4"],       # LinkedIn f_SB2 facet codes
+    easy_apply_only=True,
+)
+
+# Post search: date, author company/industry, content type, sort order
+post_filters = PostSearchFilter(
+    date_posted=DatePosted.PAST_24H,
+    content_types=["videos", "documents"],
+    sort_by=SortBy.DATE,
+)
+```
+
+### Request Throttling
+
+Scrapers throttle themselves by default: one request at a time with a
+minimum interval between navigations (2 seconds by default). Tune it with
+`LINKEDIN_MIN_REQUEST_INTERVAL` (seconds) or inject a custom
+`RequestThrottler` per scraper/adapter:
+
+```python
+from linkedin_scraper import RequestThrottler
+
+# e.g. gentler pacing for long crawls, or a hard hourly cap
+throttler = RequestThrottler(min_interval=5.0, jitter=2.0, max_requests_per_hour=300)
+scraper = PersonScraper(browser.browser_port, throttler=throttler)
+```
+
+### Selector Registry (adapting to LinkedIn UI changes)
+
+All CSS/UI coupling lives in one module — `linkedin_scraper/selectors.py`.
+If LinkedIn changes its UI, editing that single file is sufficient to fix
+the Python-side selectors across scrapers, extractors, and adapters.
 
 ### Company Posts Scraping
 
@@ -207,30 +310,33 @@ asyncio.run(scrape_company_posts())
 
 ## Authentication
 
-LinkedIn requires authentication. You need to create a session file first:
+LinkedIn requires authentication. Create a session once:
 
-### Option 1: Manual Login Script
+### Option 1: CLI (recommended)
+
+```bash
+linkedin-scraper login
+# saves linkedin_session.json in the current directory
+```
+
+### Option 2: Manual login in Python
 
 ```python
+import asyncio
 from linkedin_scraper import BrowserManager, wait_for_manual_login
 
 async def create_session():
     async with BrowserManager(headless=False) as browser:
-        # Navigate to LinkedIn
         await browser.page.goto("https://www.linkedin.com/login")
-        
-        # Wait for manual login (opens browser)
         print("Please log in to LinkedIn...")
-        await wait_for_manual_login(browser.page, timeout=300)
-        
-        # Save session
-        await browser.save_session("session.json")
-        print("✓ Session saved!")
+        await wait_for_manual_login(browser.page, timeout=300000)
+        await browser.save_session("linkedin_session.json")
+        print("Session saved!")
 
 asyncio.run(create_session())
 ```
 
-### Option 2: Programmatic Login
+### Option 3: Programmatic Login
 
 ```python
 from linkedin_scraper import BrowserManager, login_with_credentials
@@ -241,7 +347,7 @@ async def login():
         # Login with credentials
         await login_with_credentials(
             browser.page,
-            username=os.getenv("LINKEDIN_EMAIL"),
+            email=os.getenv("LINKEDIN_EMAIL"),
             password=os.getenv("LINKEDIN_PASSWORD")
         )
         
@@ -297,42 +403,52 @@ All scraped data is returned as Pydantic models:
 
 ```python
 class Person(BaseModel):
-    name: str
+    linkedin_url: str
+    name: Optional[str]
     headline: Optional[str]
     location: Optional[str]
     about: Optional[str]
-    linkedin_url: str
+    open_to_work: bool
     experiences: List[Experience]
     educations: List[Education]
     skills: List[str]
-    accomplishments: Optional[Accomplishment]
+    volunteer_experiences: List[Experience]
+    interests: List[Interest]
+    accomplishments: List[Accomplishment]
+    contacts: List[Contact]
 ```
 
 ### Company
 
 ```python
 class Company(BaseModel):
-    name: str
-    industry: Optional[str]
-    company_size: Optional[str]
+    linkedin_url: str
+    name: Optional[str]
+    about_us: Optional[str]
+    website: Optional[str]
     headquarters: Optional[str]
     founded: Optional[str]
-    specialties: List[str]
-    about: Optional[str]
-    linkedin_url: str
+    industry: Optional[str]
+    company_type: Optional[str]
+    company_size: Optional[str]
+    specialties: Optional[str]
+    # Reserved (not yet populated by CompanyScraper):
+    # headcount, showcase_pages, affiliated_companies, employees
 ```
 
 ### Job
 
 ```python
 class Job(BaseModel):
-    title: str
-    company: str
-    location: Optional[str]
-    description: Optional[str]
-    employment_type: Optional[str]
-    seniority_level: Optional[str]
     linkedin_url: str
+    job_title: Optional[str]
+    company: Optional[str]
+    company_linkedin_url: Optional[str]
+    location: Optional[str]
+    posted_date: Optional[str]
+    applicant_count: Optional[str]
+    job_description: Optional[str]
+    benefits: Optional[str]
 ```
 
 ### Post
@@ -368,7 +484,7 @@ browser = BrowserManager(
 from linkedin_scraper import (
     AuthenticationError,
     RateLimitError,
-    ProfileNotFoundError
+    ScrapingError,
 )
 
 try:
@@ -377,8 +493,8 @@ except AuthenticationError:
     print("Not logged in - session expired")
 except RateLimitError:
     print("Rate limited by LinkedIn")
-except ProfileNotFoundError:
-    print("Profile not found or private")
+except ScrapingError as e:
+    print(f"Scraping failed: {e}")
 ```
 
 ## Best Practices
@@ -402,7 +518,6 @@ except ProfileNotFoundError:
 - Python 3.8+
 - Playwright
 - Pydantic 2.0+
-- aiofiles
 - python-dotenv (optional, for credentials)
 
 ## License

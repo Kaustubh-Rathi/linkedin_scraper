@@ -1,38 +1,44 @@
 """Core modules for LinkedIn scraper."""
 
-from .browser import BrowserManager
+from ..ports.browser import BrowserPort, ElementPort
 from .auth import (
-    login_with_credentials,
-    login_with_cookie,
     is_logged_in,
-    wait_for_manual_login,
     load_credentials_from_env,
-    warm_up_browser
+    login_with_cookie,
+    login_with_credentials,
+    wait_for_manual_login,
+    warm_up_browser,
 )
+from .browser import BrowserManager, PlaywrightBrowserAdapter, PlaywrightElementAdapter
 from .exceptions import (
-    LinkedInScraperException,
     AuthenticationError,
-    RateLimitError,
     ElementNotFoundError,
-    ProfileNotFoundError,
+    LinkedInScraperException,
     NetworkError,
-    ScrapingError
+    ProfileNotFoundError,
+    RateLimitError,
+    RequiredFieldExtractionError,
+    ScrapingError,
 )
-from .utils import (
-    retry_async,
-    detect_rate_limit,
-    wait_for_element_smart,
+from .page_actions import (
+    click_see_more_buttons,
     extract_text_safe,
+    handle_modal_close,
+    is_page_loaded,
     scroll_to_bottom,
     scroll_to_half,
-    click_see_more_buttons,
-    handle_modal_close,
-    is_page_loaded
+    wait_for_element_smart,
+    wait_for_section_or_main,
 )
+from .rate_limit import RequestThrottler, detect_rate_limit, get_default_throttler
 
 __all__ = [
-    # Browser
+    # Browser & Ports
     'BrowserManager',
+    'PlaywrightBrowserAdapter',
+    'PlaywrightElementAdapter',
+    'BrowserPort',
+    'ElementPort',
     # Auth
     'login_with_credentials',
     'login_with_cookie',
@@ -48,10 +54,13 @@ __all__ = [
     'ProfileNotFoundError',
     'NetworkError',
     'ScrapingError',
+    'RequiredFieldExtractionError',
     # Utils
-    'retry_async',
     'detect_rate_limit',
+    'RequestThrottler',
+    'get_default_throttler',
     'wait_for_element_smart',
+    'wait_for_section_or_main',
     'extract_text_safe',
     'scroll_to_bottom',
     'scroll_to_half',
